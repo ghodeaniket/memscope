@@ -36,7 +36,35 @@ Electron app ships one). memscope understands that workload.
 ./memscope.sh guard              # one guard pass now
 ./memscope.sh install-guard      # launchd agent: guard every 2 min
 ./memscope.sh uninstall-guard
+./memscope.sh status             # guard performance: passes, reaps, swap sparkline
+./memscope.sh menubar            # SwiftBar/xbar plugin output
 ```
+
+## Observability
+
+Every guard pass appends a JSONL line to `~/.memscope/metrics.jsonl`
+(`ts, pressure level, swap_pct, resident_gb, trees reaped, MB freed`) and
+actions go to `~/.memscope/guard.log`. `status` summarizes the last 24h with
+a swap-trend sparkline:
+
+```
+passes: 720   orphan trees reaped: 41   freed: 575 MB   pressure alerts: 3
+swap now 55%   min 52%   max 91%
+swap trend: ▇▇▇█▅▄▄▄▃▃▃▃
+```
+
+## Menubar UI (no Electron, obviously)
+
+Install [SwiftBar](https://swiftbar.app) (or xbar), then:
+
+```bash
+mkdir -p ~/SwiftBar && printf '#!/bin/bash\nexec %s menubar\n' "$PWD/memscope.sh" > ~/SwiftBar/memscope.2m.sh && chmod +x ~/SwiftBar/memscope.2m.sh
+```
+
+You get a live 🧠 swap% in the menubar (⚠️ ≥70%, 🔴 ≥90%), with a dropdown
+showing resident/swap, today's reap totals, and one-click "Reap orphans now"
+/ "Full census" actions. A memory tool that shipped its own Chromium to
+draw a number would be self-parody; the entire UI is this script's stdout.
 
 ## Guard mode (preemptive free-up)
 

@@ -19,7 +19,7 @@ set -u
 
 MODE="report"
 case "${1:-}" in
-  guard|install-guard|uninstall-guard|report) MODE="$1"; shift ;;
+  guard|install-guard|uninstall-guard|report|status|menubar) MODE="$1"; shift ;;
 esac
 
 LOG_DIR="$HOME/.memscope"
@@ -101,12 +101,75 @@ run_guard() {
     notify "memscope guard" "Reaped ${TREES} dead MCP trees, freed ~${FREED_MB} MB"
   fi
 
+  # Metrics: one JSONL line per real pass — the performance record
+  if [ "$DRY" = 0 ]; then
+    RES_GB=$(ps -Axo rss= | awk '{s+=$1} END{printf "%.1f", s/1048576}')
+    printf '{"ts":"%s","level":%s,"swap_pct":%s,"resident_gb":%s,"trees":%s,"freed_mb":%s}\n' \
+      "$TS" "$LEVEL" "$SPCT" "$RES_GB" "$TREES" "$FREED_MB" >> "$LOG_DIR/metrics.jsonl"
+  fi
+
   [ "$DRY" = 1 ] && echo "[$TS] dry-run: level=$LEVEL swap=${SPCT}% trees=$TREES freeable=${FREED_MB}MB"
   return 0
 }
 
+run_status() {
+  METRICS="$LOG_DIR/metrics.jsonl"
+  if [ ! -s "$METRICS" ]; then
+    echo "no guard passes recorded yet — run: $SELF guard   (or install-guard)"
+    return 0
+  fi
+  echo "memscope guard — last 24h (samples every 2 min when installed)"
+  tail -720 "$METRICS" | awk -F'[,:}]' '
+  {
+    for (i=1; i<=NF; i++) {
+      if ($i ~ /"swap_pct"/)  sp[++n]=$(i+1)
+      if ($i ~ /"trees"/)     trees+=$(i+1)
+      if ($i ~ /"freed_mb"/)  freed+=$(i+1)
+      if ($i ~ /"level"/ && $(i+1)>=2) alerts++
+    }
+  }
+  END {
+    if (n==0) { print "no samples"; exit }
+    min=100; max=0
+    for (i=1;i<=n;i++) { if (sp[i]<min) min=sp[i]; if (sp[i]>max) max=sp[i] }
+    printf "passes: %d   orphan trees reaped: %d   freed: %d MB   pressure alerts: %d\n", n, trees, freed, alerts+0
+    printf "swap now %s%%   min %d%%   max %d%%\n", sp[n], min, max
+    # sparkline of the last 60 samples (~2h)
+    s=""; start=(n>60)?n-59:1
+    split("▁ ▂ ▃ ▄ ▅ ▆ ▇ █", blk, " ")   # space-split keeps multibyte chars whole in BSD awk
+    for (i=start; i<=n; i++) { b=int(sp[i]/12.6)+1; if (b>8) b=8; s=s blk[b] }
+    printf "swap trend: %s\n", s
+  }'
+  echo
+  echo "recent guard actions:"
+  tail -5 "$GUARD_LOG" 2>/dev/null || echo "  (none)"
+}
+
+run_menubar() {
+  # SwiftBar/xbar plugin format. Install SwiftBar, then symlink:
+  #   ln -s <this script's menubar wrapper> ~/SwiftBar/memscope.2m.sh
+  SPCT=$(swap_pct)
+  ICON="🧠"
+  [ "$SPCT" -ge 70 ] && ICON="⚠️"
+  [ "$SPCT" -ge 90 ] && ICON="🔴"
+  echo "$ICON ${SPCT}%"
+  echo "---"
+  ps -Axo rss= | awk '{s+=$1} END{printf "Resident: %.1f GB\n", s/1048576}'
+  sysctl -n vm.swapusage | awk '{printf "Swap: %s used of %s\n", $6, $3}'
+  if [ -s "$LOG_DIR/metrics.jsonl" ]; then
+    TODAY=$(date "+%Y-%m-%d")
+    grep "\"ts\":\"$TODAY" "$LOG_DIR/metrics.jsonl" | awk -F'[,:}]' '
+    { for (i=1;i<=NF;i++) { if ($i ~ /"trees"/) t+=$(i+1); if ($i ~ /"freed_mb"/) f+=$(i+1) } }
+    END { printf "Reaped today: %d trees, %d MB\n", t+0, f+0 }'
+  fi
+  echo "Reap orphans now | bash=$SELF param1=guard terminal=false refresh=true"
+  echo "Full census | bash=$SELF terminal=true"
+}
+
 case "$MODE" in
   guard) run_guard "${1:-}"; exit 0 ;;
+  status) run_status; exit 0 ;;
+  menubar) run_menubar; exit 0 ;;
   install-guard)
     mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
     cat > "$PLIST" <<PLIST_EOF
