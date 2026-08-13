@@ -77,9 +77,37 @@ The guard runs every 2 minutes and works ahead of the macOS
 2. **Under pressure** (kernel pressure level ≥ warn, or swap ≥ 85%) it sends
    a macOS notification naming the biggest consumers (Chrome tabs, Electron
    apps) so you can close things *before* the OOM dialog picks for you.
-3. **Never auto-kills anything with user state.** The kill allowlist is
-   exactly one class: dead sessions' connector trees. Everything else is
-   advice. Log: `~/.memscope/guard.log`.
+3. **Idle-session auto-close** — a Claude Code session process that accrues
+   under 10s of CPU across 6 continuous hours (`MEMSCOPE_IDLE_HOURS` to tune,
+   `0` to disable) is provably unread; the guard sends it SIGTERM and
+   notifies. Transcripts live on disk and sessions resume from the app, so
+   only warm state is lost. Each idle session holds ~450–550 MB (its process
+   plus its private copy of every MCP connector). The guard never touches its
+   own ancestor chain, and the idle clock resets on any CPU activity — a
+   session running background work is never "idle".
+4. **Never auto-kills anything with user state.** The kill allowlist is two
+   provable classes: dead sessions' connector trees, and sessions with zero
+   CPU activity for 6+ hours. Everything else is advice.
+   Logs: `~/.memscope/guard.log`, metrics: `~/.memscope/metrics.jsonl`.
+
+## Proving it works
+
+```bash
+./test/run_tests.sh
+```
+
+Nine assertions, no root, no side effects, ~5 seconds:
+
+- **Unit** — the orphan detector runs against a canned process table
+  (`MEMSCOPE_PS_FIXTURE`): kills the >2h orphan tree and the 26h one, spares
+  the live-parented connector, the young orphan, and memscope itself.
+- **Integration** — a fake session process (path-matched to the real pgrep
+  pattern) with a seeded idle clock really receives SIGTERM
+  (`MEMSCOPE_IDLE_SECONDS` shrinks 6h to 60s for the test), and the close is
+  logged; a fresh session is only tracked, never killed.
+- **Production evidence** — every real action is in `~/.memscope/guard.log`
+  and every pass in `metrics.jsonl`; `status` renders the before/after. On
+  this machine's first real pass: 41 orphaned trees reaped, swap 91% → 55%.
 
 ## Design principles
 

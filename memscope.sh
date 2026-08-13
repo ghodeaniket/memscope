@@ -22,19 +22,30 @@ case "${1:-}" in
   guard|install-guard|uninstall-guard|report|status|menubar) MODE="$1"; shift ;;
 esac
 
-LOG_DIR="$HOME/.memscope"
+LOG_DIR="${MEMSCOPE_LOG_DIR:-$HOME/.memscope}"   # override for tests
 GUARD_LOG="$LOG_DIR/guard.log"
 PLIST="$HOME/Library/LaunchAgents/com.memscope.guard.plist"
 LABEL="com.memscope.guard"
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
+# Process-table source: real ps, or a canned fixture for unit tests
+ps_snapshot() {
+  if [ -n "${MEMSCOPE_PS_FIXTURE:-}" ]; then cat "$MEMSCOPE_PS_FIXTURE"
+  else ps -Axo pid=,ppid=,etime=,rss=,args=; fi
+}
+
 # Emit orphaned MCP trees as: totalMB|pids to kill|age|name
 find_orphans() {
-  ps -Axo pid=,ppid=,etime=,rss=,args= | awk '
+  ps_snapshot | awk '
   { pid[NR]=$1; ppid[NR]=$2; et[NR]=$3; rss[NR]=$4; line[NR]=$0 }
   END {
-    for (i=1; i<=NR; i++)
-      if (ppid[i]==1 && et[i] ~ /-/ && line[i] ~ /mcp/) root[pid[i]]=i
+    # orphan age: >24h ("-" in etime) OR HH:MM:SS with HH>=2 — so connectors
+    # orphaned by an idle-session close get reaped within ~2h, not a day
+    for (i=1; i<=NR; i++) {
+      n = split(et[i], a, ":")
+      old = (et[i] ~ /-/) || (n==3 && a[1]+0 >= 2)
+      if (ppid[i]==1 && old && line[i] ~ /mcp/) root[pid[i]]=i
+    }
     for (i=1; i<=NR; i++)
       if (ppid[i] in root) { j=root[ppid[i]]; kid_mb[j]+=rss[i]/1024; kids[j]=kids[j]" "pid[i] }
     for (p in root) {
@@ -59,7 +70,60 @@ pressure_level() {
 }
 
 notify() { # $1 title, $2 body
+  [ -n "${MEMSCOPE_NO_NOTIFY:-}" ] && return 0
   osascript -e "display notification \"$2\" with title \"$1\"" 2>/dev/null || true
+}
+
+# Idle-session auto-close: a session whose process accrues <10s CPU over
+# MEMSCOPE_IDLE_HOURS (default 6, 0=off) is unread — TERM it. Transcripts are
+# persisted on disk and sessions are resumable; only warm state is lost.
+# State: $LOG_DIR/sessions.state lines "pid|starthash|idle_since|cpu_at_idle"
+reap_idle_sessions() {
+  DRY="$1"; TS="$2"
+  IDLE_H="${MEMSCOPE_IDLE_HOURS:-6}"
+  [ "$IDLE_H" = "0" ] && return 0
+  IDLE_SECS="${MEMSCOPE_IDLE_SECONDS:-$((IDLE_H * 3600))}"   # seconds override for tests
+  STATE="$LOG_DIR/sessions.state"; touch "$STATE"
+  NOW=$(date +%s)
+  NEWSTATE=""
+
+  # never touch our own ancestor chain (manual runs from inside a session)
+  ANCESTORS=" "; p=$$
+  while [ "$p" -gt 1 ] 2>/dev/null; do
+    ANCESTORS="$ANCESTORS$p "
+    p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ') || break
+    [ -z "$p" ] && break
+  done
+
+  for pid in $(pgrep -f "claude.app/Contents/MacOS/claude" 2>/dev/null); do
+    case "$ANCESTORS" in *" $pid "*) continue ;; esac
+    CPU_S=$(ps -o time= -p "$pid" 2>/dev/null | awk -F: '{ if (NF==3) print $1*3600+$2*60+$3; else if (NF==2) print $1*60+$2; else print 0 }' | cut -d. -f1)
+    [ -z "$CPU_S" ] && continue
+    SHASH=$(ps -o lstart= -p "$pid" 2>/dev/null | tr -d ' :')
+    KEY="${pid}|${SHASH}"
+    PREV=$(grep "^${KEY}|" "$STATE" 2>/dev/null | head -1)
+    if [ -n "$PREV" ]; then
+      IDLE_SINCE=$(echo "$PREV" | cut -d'|' -f3)
+      CPU_AT=$(echo "$PREV" | cut -d'|' -f4)
+      if [ $((CPU_S - CPU_AT)) -gt 10 ]; then
+        IDLE_SINCE=$NOW; CPU_AT=$CPU_S            # activity → reset idle clock
+      elif [ $((NOW - IDLE_SINCE)) -gt "$IDLE_SECS" ]; then
+        IDLE_HRS_ACTUAL=$(( (NOW - IDLE_SINCE) / 3600 ))
+        if [ "$DRY" = 1 ]; then
+          echo "[$TS] DRY would close idle session pid=$pid (no CPU activity ${IDLE_HRS_ACTUAL}h)" | tee -a "$GUARD_LOG"
+        else
+          kill -TERM "$pid" 2>/dev/null
+          echo "[$TS] closed idle session pid=$pid (no CPU activity ${IDLE_HRS_ACTUAL}h)" >> "$GUARD_LOG"
+          notify "memscope guard" "Closed session idle ${IDLE_HRS_ACTUAL}h (pid $pid). Resumable from the app."
+        fi
+        continue                                   # killed → drop from state
+      fi
+      NEWSTATE="${NEWSTATE}${KEY}|${IDLE_SINCE}|${CPU_AT}\n"
+    else
+      NEWSTATE="${NEWSTATE}${KEY}|${NOW}|${CPU_S}\n"
+    fi
+  done
+  printf '%b' "$NEWSTATE" > "$STATE"
 }
 
 run_guard() {
@@ -68,6 +132,9 @@ run_guard() {
   TS=$(date "+%Y-%m-%d %H:%M:%S")
   LEVEL=$(pressure_level)
   SPCT=$(swap_pct)
+
+  # 0. Idle sessions: TERM sessions unread for MEMSCOPE_IDLE_HOURS (default 6)
+  reap_idle_sessions "$DRY" "$TS"
 
   # 1. Always reap garbage: orphaned MCP trees are dead sessions' leaks.
   ORPHANS=$(find_orphans)
