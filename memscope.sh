@@ -19,7 +19,7 @@ set -u
 
 MODE="report"
 case "${1:-}" in
-  guard|install-guard|uninstall-guard|report|status|menubar) MODE="$1"; shift ;;
+  guard|install-guard|uninstall-guard|report|status|menubar|summary) MODE="$1"; shift ;;
 esac
 
 LOG_DIR="${MEMSCOPE_LOG_DIR:-$HOME/.memscope}"   # override for tests
@@ -154,6 +154,13 @@ run_guard() {
   fi
 
   # 2. Under pressure: warn early, with specifics — before macOS force-quits.
+  # Cooldown: at most one pressure notification per 30 min (log every time).
+  ALERT_OK=1
+  ALERT_STAMP="$LOG_DIR/.last_alert"
+  if [ -f "$ALERT_STAMP" ]; then
+    LAST_ALERT=$(cat "$ALERT_STAMP" 2>/dev/null || echo 0)
+    [ $(( $(date +%s) - LAST_ALERT )) -lt 1800 ] && ALERT_OK=0
+  fi
   if [ "$LEVEL" -ge 2 ] || [ "$SPCT" -ge 85 ]; then
     TOPLINE=$(ps -Axo rss=,args= | awk '
       /Google Chrome Helper \(Renderer\)/ {c+=$1}
@@ -162,7 +169,10 @@ run_guard() {
     MSG="Swap ${SPCT}%."
     [ "$TREES" -gt 0 ] && MSG="$MSG Freed ${FREED_MB}MB (${TREES} dead MCP trees)."
     MSG="$MSG Biggest: ${TOPLINE}. Close what you can."
-    [ "$DRY" = 1 ] || notify "memscope guard — memory pressure" "$MSG"
+    if [ "$DRY" = 0 ] && [ "$ALERT_OK" = 1 ]; then
+      notify "memscope guard — memory pressure" "$MSG"
+      date +%s > "$ALERT_STAMP"
+    fi
     echo "[$TS] pressure level=$LEVEL swap=${SPCT}% :: $MSG" >> "$GUARD_LOG"
   elif [ "$TREES" -gt 0 ] && [ "$DRY" = 0 ]; then
     notify "memscope guard" "Reaped ${TREES} dead MCP trees, freed ~${FREED_MB} MB"
@@ -212,6 +222,41 @@ run_status() {
   tail -5 "$GUARD_LOG" 2>/dev/null || echo "  (none)"
 }
 
+run_summary() {
+  DAY="${1:-$(date +%Y-%m-%d)}"
+  METRICS="$LOG_DIR/metrics.jsonl"
+  echo "memscope — $DAY"
+  if [ ! -s "$METRICS" ] || ! grep -q "\"ts\":\"$DAY" "$METRICS" 2>/dev/null; then
+    echo "no guard passes recorded on $DAY"
+    return 0
+  fi
+  # Reap stats come from guard.log (authoritative for actions, and predates
+  # the metrics file); passes/swap/alerts come from metrics.jsonl.
+  REAPED=$(grep -c "^\[$DAY.*] reaped:" "$GUARD_LOG" 2>/dev/null | head -1); REAPED=${REAPED:-0}
+  FREED=$(grep "^\[$DAY.*] reaped:" "$GUARD_LOG" 2>/dev/null | grep -oE '\([0-9]+ MB' | grep -oE '[0-9]+' | awk '{s+=$1} END{print s+0}')
+  grep "\"ts\":\"$DAY" "$METRICS" | awk -F'[,:}]' -v reaped="$REAPED" -v freed="$FREED" '
+  {
+    for (i=1; i<=NF; i++) {
+      if ($i ~ /"swap_pct"/)  { v=$(i+1); n++; if (min==""||v<min) min=v; if (v>max) max=v; last=v; if (first=="") first=v }
+      if ($i ~ /"level"/ && $(i+1)>=2) alerts++
+    }
+  }
+  END {
+    printf "ran %d times", n
+    if (reaped>0) printf " · reaped %d orphaned MCP trees · reclaimed ~%d MB RSS", reaped, freed
+    else printf " · no orphans found (machine stayed clean)"
+    printf "\n"
+    printf "swap: started %s%% · ended %s%% · range %s–%s%%", first, last, min, max
+    if (alerts>0) printf " · %d pressure alerts logged", alerts
+    printf "\n"
+  }'
+  CLOSED=$(grep -c "^\[$DAY.*closed idle session" "$GUARD_LOG" 2>/dev/null | head -1)
+  [ "${CLOSED:-0}" -gt 0 ] 2>/dev/null && echo "closed $CLOSED idle sessions (6h+ unread, resumable)"
+  ACTIONS=$(grep "^\[$DAY" "$GUARD_LOG" 2>/dev/null | grep -vc "DRY")
+  echo
+  echo "actions logged: ${ACTIONS:-0}   (details: $GUARD_LOG)"
+}
+
 run_menubar() {
   # SwiftBar/xbar plugin format. Install SwiftBar, then symlink:
   #   ln -s <this script's menubar wrapper> ~/SwiftBar/memscope.2m.sh
@@ -236,6 +281,7 @@ run_menubar() {
 case "$MODE" in
   guard) run_guard "${1:-}"; exit 0 ;;
   status) run_status; exit 0 ;;
+  summary) run_summary "${1:-}"; exit 0 ;;
   menubar) run_menubar; exit 0 ;;
   install-guard)
     mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
