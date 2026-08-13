@@ -1,11 +1,139 @@
 #!/bin/bash
-# memscope — memory census for the agent-era Mac
+# memscope — memory census + pressure guard for the agent-era Mac
 # What's actually eating your RAM: Chromium fleet, Electron apps, node/MCP
-# sprawl, zombie dev processes. Read-only: prints kill commands, never runs them.
+# sprawl, zombie dev processes.
 #
-# Usage: memscope.sh [--top N] [--no-color]
+# Usage:
+#   memscope.sh [report] [--top N] [--no-color]   read-only census (default)
+#   memscope.sh guard [--dry-run]                 one guard pass: reap orphaned
+#                                                 MCP trees; under pressure,
+#                                                 notify with specific advice
+#   memscope.sh install-guard                     launchd agent, every 2 min
+#   memscope.sh uninstall-guard
+#
+# Guard safety rule: auto-kills ONLY provable garbage — connector trees whose
+# parent session is dead (ppid=1, alive >24h, args mention mcp). Everything
+# else is a notification, never a kill.
 
 set -u
+
+MODE="report"
+case "${1:-}" in
+  guard|install-guard|uninstall-guard|report) MODE="$1"; shift ;;
+esac
+
+LOG_DIR="$HOME/.memscope"
+GUARD_LOG="$LOG_DIR/guard.log"
+PLIST="$HOME/Library/LaunchAgents/com.memscope.guard.plist"
+LABEL="com.memscope.guard"
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+
+# Emit orphaned MCP trees as: totalMB|pids to kill|age|name
+find_orphans() {
+  ps -Axo pid=,ppid=,etime=,rss=,args= | awk '
+  { pid[NR]=$1; ppid[NR]=$2; et[NR]=$3; rss[NR]=$4; line[NR]=$0 }
+  END {
+    for (i=1; i<=NR; i++)
+      if (ppid[i]==1 && et[i] ~ /-/ && line[i] ~ /mcp/) root[pid[i]]=i
+    for (i=1; i<=NR; i++)
+      if (ppid[i] in root) { j=root[ppid[i]]; kid_mb[j]+=rss[i]/1024; kids[j]=kids[j]" "pid[i] }
+    for (p in root) {
+      j=root[p]
+      what=""; n=split(line[j], tok, " ")
+      for (k=5; k<=n; k++) if (tok[k] ~ /mcp/) what=tok[k]
+      m=split(what, seg, "/")
+      printf "%.0f|%s%s|%s|%s\n", rss[j]/1024 + kid_mb[j], p, kids[j], et[j], seg[m]
+    }
+  }'
+}
+
+swap_pct() {
+  sysctl -n vm.swapusage | awk '{t=$3; u=$6; gsub(/M/,"",t); gsub(/M/,"",u); if (t>0) printf "%.0f", u*100/t; else print 0}'
+}
+
+pressure_level() {
+  # 1=normal 2=warn 4=critical; fall back to swap heuristic if sysctl missing
+  sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null || {
+    [ "$(swap_pct)" -ge 90 ] && echo 4 || echo 1
+  }
+}
+
+notify() { # $1 title, $2 body
+  osascript -e "display notification \"$2\" with title \"$1\"" 2>/dev/null || true
+}
+
+run_guard() {
+  DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
+  mkdir -p "$LOG_DIR"
+  TS=$(date "+%Y-%m-%d %H:%M:%S")
+  LEVEL=$(pressure_level)
+  SPCT=$(swap_pct)
+
+  # 1. Always reap garbage: orphaned MCP trees are dead sessions' leaks.
+  ORPHANS=$(find_orphans)
+  FREED_MB=0; TREES=0
+  if [ -n "$ORPHANS" ]; then
+    while IFS='|' read -r mb pids age name; do
+      [ -z "$pids" ] && continue
+      TREES=$((TREES+1)); FREED_MB=$((FREED_MB+mb))
+      if [ "$DRY" = 1 ]; then
+        echo "[$TS] DRY would kill: $name ($mb MB, up $age) pids:$pids" | tee -a "$GUARD_LOG"
+      else
+        # shellcheck disable=SC2086
+        kill $pids 2>/dev/null
+        echo "[$TS] reaped: $name ($mb MB, up $age) pids:$pids" >> "$GUARD_LOG"
+      fi
+    done <<< "$ORPHANS"
+  fi
+
+  # 2. Under pressure: warn early, with specifics — before macOS force-quits.
+  if [ "$LEVEL" -ge 2 ] || [ "$SPCT" -ge 85 ]; then
+    TOPLINE=$(ps -Axo rss=,args= | awk '
+      /Google Chrome Helper \(Renderer\)/ {c+=$1}
+      /\/Applications\/Claude\.app\//     {cl+=$1}
+      END {printf "Chrome tabs %.1fG, Claude app %.1fG", c/1048576, cl/1048576}')
+    MSG="Swap ${SPCT}%."
+    [ "$TREES" -gt 0 ] && MSG="$MSG Freed ${FREED_MB}MB (${TREES} dead MCP trees)."
+    MSG="$MSG Biggest: ${TOPLINE}. Close what you can."
+    [ "$DRY" = 1 ] || notify "memscope guard — memory pressure" "$MSG"
+    echo "[$TS] pressure level=$LEVEL swap=${SPCT}% :: $MSG" >> "$GUARD_LOG"
+  elif [ "$TREES" -gt 0 ] && [ "$DRY" = 0 ]; then
+    notify "memscope guard" "Reaped ${TREES} dead MCP trees, freed ~${FREED_MB} MB"
+  fi
+
+  [ "$DRY" = 1 ] && echo "[$TS] dry-run: level=$LEVEL swap=${SPCT}% trees=$TREES freeable=${FREED_MB}MB"
+  return 0
+}
+
+case "$MODE" in
+  guard) run_guard "${1:-}"; exit 0 ;;
+  install-guard)
+    mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
+    cat > "$PLIST" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/bash</string><string>$SELF</string><string>guard</string>
+  </array>
+  <key>StartInterval</key><integer>120</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>$LOG_DIR/guard.out</string>
+  <key>StandardErrorPath</key><string>$LOG_DIR/guard.err</string>
+</dict></plist>
+PLIST_EOF
+    launchctl unload "$PLIST" 2>/dev/null || true
+    launchctl load -w "$PLIST"
+    echo "installed: guard runs every 2 min (log: $GUARD_LOG)"
+    echo "uninstall: $SELF uninstall-guard"
+    exit 0 ;;
+  uninstall-guard)
+    launchctl unload "$PLIST" 2>/dev/null || true
+    rm -f "$PLIST"
+    echo "guard uninstalled"
+    exit 0 ;;
+esac
 
 TOP=8
 COLOR=1
@@ -13,7 +141,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --top) TOP="${2:-8}"; shift 2 ;;
     --no-color) COLOR=0; shift ;;
-    *) echo "usage: memscope.sh [--top N] [--no-color]" >&2; exit 1 ;;
+    *) echo "usage: memscope.sh [report|guard|install-guard|uninstall-guard] [--top N] [--no-color]" >&2; exit 1 ;;
   esac
 done
 [ -t 1 ] || COLOR=0

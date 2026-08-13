@@ -29,10 +29,29 @@ Electron app ships one). memscope understands that workload.
 ## Usage
 
 ```bash
-./memscope.sh              # colorized report
-./memscope.sh --no-color   # plain (for logs/pipes)
-./memscope.sh --top 15     # deeper top-N lists
+./memscope.sh                    # colorized report
+./memscope.sh --no-color         # plain (for logs/pipes)
+./memscope.sh --top 15           # deeper top-N lists
+./memscope.sh guard --dry-run    # show what a guard pass would reap
+./memscope.sh guard              # one guard pass now
+./memscope.sh install-guard      # launchd agent: guard every 2 min
+./memscope.sh uninstall-guard
 ```
+
+## Guard mode (preemptive free-up)
+
+The guard runs every 2 minutes and works ahead of the macOS
+"out of application memory" force-quit dialog:
+
+1. **Always reaps provable garbage** — orphaned MCP connector trees left
+   behind by dead agent sessions (ppid 1, alive >24h). These pin swap even
+   while idle; reaping them on this machine released ~4 GB of swap.
+2. **Under pressure** (kernel pressure level ≥ warn, or swap ≥ 85%) it sends
+   a macOS notification naming the biggest consumers (Chrome tabs, Electron
+   apps) so you can close things *before* the OOM dialog picks for you.
+3. **Never auto-kills anything with user state.** The kill allowlist is
+   exactly one class: dead sessions' connector trees. Everything else is
+   advice. Log: `~/.memscope/guard.log`.
 
 ## Design principles
 
