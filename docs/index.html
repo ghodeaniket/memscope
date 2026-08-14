@@ -3,144 +3,178 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>memscope — Claude, Chrome, VS Code. Then the Mac gets slow.</title>
-<meta name="description" content="People running Claude Code, Chrome, and VS Code on the same MacBook blame the 16 GB. A lot of that slowness is dead AI sessions still holding swap.">
+<title>memscope — the more agents you run, the less Mac you're left with</title>
+<meta name="description" content="Agentic workflows spawn process fleets that outlive their sessions. memscope reaps the dead ones, closes the abandoned, and warns before macOS kills the thread you're working in.">
+<meta property="og:title" content="The more agents you run, the less Mac you're left with.">
+<meta property="og:description" content="Dead agent fleets pin gigabytes of swap. memscope is the census, then the guard.">
 <style>
   :root {
-    --bg: #fbfaf7; --fg: #1a1a1a; --dim: #6b6b6b; --accent: #b33a1e;
-    --mono-bg: #14161a; --mono-fg: #d8e0ea; --mono-green: #7ee787;
-    --rule: #e2ded6; --card: #f2efe8;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #101214; --fg: #e6e3dc; --dim: #9a978f; --accent: #ff7a54;
-      --mono-bg: #0a0c0e; --mono-fg: #c8d2dd; --rule: #26292d; --card: #17191c;
-    }
+    --bg: #0c0e11; --panel: #12151a; --edge: #1f242c;
+    --ink: #dfe6ee; --dim: #7d8894; --hot: #ff5d3a; --ok: #58d68d;
+    --num: #ffd166;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: var(--bg); color: var(--fg);
-    font: 18px/1.65 Georgia, 'Times New Roman', serif;
-    padding: 4rem 1.25rem 5rem;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    padding-bottom: 6rem;
   }
-  main { max-width: 42rem; margin: 0 auto; }
-  .kicker {
-    font: 700 0.8rem/1 ui-monospace, 'SF Mono', Menlo, monospace;
-    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.25rem; }
+  header {
+    border-bottom: 1px solid var(--edge); padding: 1rem 0;
+    font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim);
   }
-  h1 {
-    font-size: clamp(1.9rem, 5.5vw, 2.9rem); line-height: 1.15;
-    margin: 0.75rem 0 1.5rem; letter-spacing: -0.01em;
+  header .wrap { display: flex; justify-content: space-between; }
+  header a { color: var(--dim); text-decoration: none; }
+  .hero { padding: 4.5rem 0 3rem; border-bottom: 1px solid var(--edge); }
+  .hero h1 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(2.1rem, 6vw, 3.6rem); line-height: 1.05;
+    letter-spacing: -0.02em; max-width: 18em;
   }
-  p { margin: 0 0 1.15rem; }
-  .lede { font-size: 1.12em; }
-  em { font-style: italic; }
-  pre {
-    background: var(--mono-bg); color: var(--mono-fg);
-    font: 0.82rem/1.6 ui-monospace, 'SF Mono', Menlo, monospace;
-    padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto;
-    margin: 1.4rem 0;
+  .hero h1 em { font-style: normal; color: var(--hot); }
+  .hero p {
+    margin-top: 1.5rem; max-width: 44em; color: var(--dim); font-size: 1rem;
   }
-  pre .g { color: var(--mono-green); }
-  .stats {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-    gap: 1px; background: var(--rule); border: 1px solid var(--rule);
-    border-radius: 10px; overflow: hidden; margin: 2.2rem 0;
+  .hero p b { color: var(--ink); font-weight: 600; }
+  .term {
+    margin-top: 2.2rem; background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 10px; padding: 1.1rem 1.3rem; font-size: 0.83rem; line-height: 1.7;
+    overflow-x: auto; white-space: pre;
   }
-  .stats div { background: var(--card); padding: 1rem 1.1rem; }
-  .stats b {
-    display: block; font-size: 1.5rem; line-height: 1.2;
-    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  .term .c { color: var(--dim); } .term .h { color: var(--hot); } .term .k { color: var(--ok); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1px;
+    background: var(--edge); border-bottom: 1px solid var(--edge); }
+  .cols section { background: var(--bg); padding: 2.2rem 1.5rem; }
+  .cols .n { color: var(--hot); font-size: 0.8rem; letter-spacing: 0.1em; }
+  .cols h2 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1.15rem; margin: 0.5rem 0 0.7rem; letter-spacing: -0.01em;
   }
-  .stats span { font-size: 0.78rem; color: var(--dim); }
-  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.4rem 0; }
-  h2 { font-size: 1.25rem; margin: 2rem 0 0.9rem; }
-  a { color: var(--accent); }
-  .foot { font-size: 0.85rem; color: var(--dim); margin-top: 2.5rem; }
-  .note { font-size: 0.9em; color: var(--dim); }
+  .cols p { color: var(--dim); font-size: 0.9rem; }
+  .cols p b { color: var(--ink); }
+  .band { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 1px; background: var(--edge); border-bottom: 1px solid var(--edge); }
+  .band div { background: var(--panel); padding: 1.4rem 1.5rem; }
+  .band b { display: block; font-size: 1.9rem; color: var(--num); font-weight: 600; }
+  .band span { font-size: 0.75rem; color: var(--dim); }
+  .punch { padding: 3.5rem 0; border-bottom: 1px solid var(--edge); }
+  .punch h2 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(1.5rem, 4vw, 2.2rem); letter-spacing: -0.015em;
+    max-width: 24em; line-height: 1.25;
+  }
+  .punch h2 em { font-style: normal; color: var(--hot); }
+  .punch p { margin-top: 1.1rem; color: var(--dim); max-width: 46em; font-size: 1rem; }
+  .punch p b { color: var(--ink); }
+  .spec { padding: 3rem 0; border-bottom: 1px solid var(--edge); }
+  .spec h2, .go h2 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1.5rem; letter-spacing: -0.01em; margin-bottom: 1.4rem;
+  }
+  .spec dl { display: grid; gap: 1.1rem; max-width: 46rem; }
+  .spec dt { color: var(--ok); font-weight: 600; }
+  .spec dd { color: var(--dim); margin: 0.15rem 0 0; font-size: 0.92rem; }
+  .spec dd b { color: var(--ink); }
+  .safety { margin-top: 1.8rem; padding: 1rem 1.3rem; border-left: 3px solid var(--hot);
+    background: var(--panel); font-size: 0.88rem; color: var(--dim); max-width: 44rem; }
+  .safety b { color: var(--ink); }
+  .go { padding: 3rem 0; }
+  footer { color: var(--dim); font-size: 0.78rem; padding-top: 2.5rem; }
+  a { color: var(--ok); }
 </style>
 </head>
 <body>
-<main>
-  <p class="kicker">memscope · for the Claude + Chrome + VS Code Mac</p>
-  <h1>Everyone blames the 16&nbsp;GB. A lot of it is already&nbsp;dead.</h1>
+<header><div class="wrap"><span>memscope</span>
+  <span><a href="./story.html">the 48-hour story</a> · <a href="https://github.com/ghodeaniket/memscope">github</a></span>
+</div></header>
 
-  <p class="lede">I’ve heard this from enough colleagues now. Claude Code, Chrome, VS&nbsp;Code,
-  same MacBook. By midweek the machine is sand. Clicks beachball. macOS throws
-  <em>“out of application memory”</em> and force-quits something they still needed.
-  Then someone opens the Apple Store and starts pricing 64&nbsp;GB.</p>
+<div class="hero"><div class="wrap">
+  <h1>The more agents you run, the <em>less Mac</em> you're left&nbsp;with.</h1>
+  <p>Agentic development scales sideways: every session spawns its own fleet of
+  tool servers, connectors, and headless browsers. The sessions end.
+  <b>The fleets don't.</b> By midweek the machine is sand, macOS starts
+  force-quitting on its own judgment — and it doesn't kill politely.
+  <b>It kills the thread you were working in</b>: the session holding three hours
+  of context, the agent mid-migration, the reasoning you can't re-prompt.</p>
+<div class="term"><span class="c">$ ./memscope.sh guard --dry-run</span>
+<span class="h">41 orphaned agent-tool trees</span> · parent: launchd · age: up to 3 days
+pinning <span class="h">~4 GB of swap</span> · invisible to Activity Monitor (named <span class="c">node</span>) and every cleaner app
+<span class="k">→ would reap all 41 · live sessions untouched</span></div>
+</div></div>
 
-  <p>The live apps are heavy. That’s real. But a chunk of the slowness isn’t Chrome
-  or VS&nbsp;Code. It’s AI sessions they <em>already closed</em>.</p>
+<div class="cols"><div class="wrap" style="display:contents">
+  <section><span class="n">01 · THE PATTERN</span>
+    <h2>You scale the workflow</h2>
+    <p>More agents, more subagents, more tools. Whatever the framework —
+    each session is really a <b>process fleet</b>: connectors, MCP servers,
+    watchers, browsers. Fleet size × open sessions is your real footprint.</p>
+  </section>
+  <section><span class="n">02 · THE DECAY</span>
+    <h2>The machine turns to sand</h2>
+    <p>Sessions end; children get orphaned and idle forever. RAM fills with
+    <b>finished work</b>, swap grows to hold it, and every click pays a
+    paging tax. It reads as "my Mac is old." It isn't.</p>
+  </section>
+  <section><span class="n">03 · THE COST</span>
+    <h2>Force-quit hell — lost threads</h2>
+    <p>At the ceiling, macOS picks victims. The beachball is annoying;
+    <b>losing state is expensive</b> — the long-running agent, the context
+    you built all morning. That's the bill nobody itemizes.</p>
+  </section>
+</div></div>
 
-<pre><code>$ ps -Axo pid,ppid,etime,args | grep mcp
-</code></pre>
+<div class="band"><div class="wrap" style="display:contents">
+  <div><b>41</b><span>dead agent-tool trees, first pass on one 16 GB M4</span></div>
+  <div><b>91→55%</b><span>swap, minutes after the reap</span></div>
+  <div><b>4 GB</b><span>swap those dead fleets were pinning</span></div>
+  <div><b>0</b><span>wrongful kills since</span></div>
+  <div><b>3.4 MB</b><span>guard footprint, 0.14s per pass, nothing resident</span></div>
+  <div><b>9/9</b><span>tests, incl. one that caught its own false positive</span></div>
+</div></div>
 
-  <p>Each Claude Code session spins up its own private fleet of MCP connectors.
-  When the session dies, those children often don’t. launchd adopts them. They sit
-  idle, named <code>node</code> in Activity Monitor, invisible to CleanMyMac,
-  still pinning RAM and — the part nobody mentions — <strong>holding gigabytes of
-  swap</strong>.</p>
+<div class="punch"><div class="wrap">
+  <h2>There are two fixes for this. One costs a couple of thousand dollars.
+  <em>The other is a free shell script.</em></h2>
+  <p>A 64&thinsp;GB machine genuinely solves it — but a lot of that money buys
+  headroom for processes that <b>finished their work days ago</b>. So run the
+  script first. The dry-run is read-only and takes five seconds. If memscope
+  finds nothing, buy the laptop with a clear conscience — at least you'll know
+  the new RAM is going to live work, not ghosts. <b>This page exists because
+  that first pass found 4&thinsp;GB of ghosts — and the upgrade stayed in the
+  cart.</b></p>
+</div></div>
 
-  <p>That’s why the Mac feels haunted after a week of agents. The work is gone.
-  The processes aren’t.</p>
+<div class="spec"><div class="wrap">
+  <h2>memscope: the census, then the guard</h2>
+  <dl>
+    <dt>reap the provably dead</dt>
+    <dd>Tool trees whose session is gone — parented by launchd, older than 2h —
+    are killed on sight. <b>Nothing with a living parent is ever touched.</b></dd>
+    <dt>close the abandoned</dt>
+    <dd>A session with zero CPU for six straight hours is unread. Graceful TERM,
+    notification, transcripts stay on disk — <b>resume anytime, nothing lost.</b></dd>
+    <dt>warn before macOS picks victims</dt>
+    <dd>Under real pressure it names the actual consumers ("Chrome tabs 4.1G,
+    Claude app 0.9G") <b>while you can still choose</b> what to close — instead of
+    macOS choosing for you.</dd>
+  </dl>
+  <div class="safety"><b>Safety contract:</b> the kill-list is exactly two provable
+  classes — dead fleets and 6h-zero-CPU sessions. Everything else is advice.
+  Dry-run shows you every intended kill before you grant it anything.</div>
+</div></div>
 
-  <hr>
-
-  <h2>memscope is the check, then the guard</h2>
-
-  <p>One shell script. First it shows you the ghosts. Then, if you want, launchd
-  runs it every two minutes:</p>
-
-  <p>— <strong>Reap the provably dead.</strong> Connector trees whose session is gone
-  (parented by launchd, older than 2h) get killed. Nothing with a living parent is
-  touched.<br>
-  — <strong>Close the abandoned.</strong> A session with zero CPU for six straight
-  hours is unread; it gets a graceful TERM. Transcripts stay on disk.<br>
-  — <strong>Warn before macOS picks victims.</strong> Under real pressure it names
-  the actual pigs (“Chrome tabs 4.1G, Claude app 0.9G”) while you can still choose.</p>
-
-  <p class="note">The guard itself: 3.4&thinsp;MB for 0.14 seconds, every two minutes,
-  nothing resident in between. A memory tool that ran a fat daemon all day would
-  be part of the problem.</p>
-
-  <p>On one 16&thinsp;GB M4 running that exact stack, the first pass reaped
-  <strong>41 orphaned MCP trees</strong>. Swap 91% → 55% in minutes. Same workload
-  the next day: no force-quit dialogs. The upgrade stayed in the cart.</p>
-
-  <div class="stats">
-    <div><b>41</b><span>orphaned MCP trees on a typical first pass</span></div>
-    <div><b>91→55%</b><span>swap, minutes after the reap</span></div>
-    <div><b>4&thinsp;GB</b><span>swap those dead processes were pinning</span></div>
-    <div><b>0</b><span>wrongful kills across later passes</span></div>
-    <div><b>3.4&thinsp;MB</b><span>guard’s peak footprint, 0.14s per pass</span></div>
-    <div><b>9/9</b><span>tests — including one that caught its own false positive</span></div>
-  </div>
-
-  <h2>See yours in five seconds</h2>
-
-<pre><code>git clone https://github.com/ghodeaniket/memscope
-cd memscope
-./memscope.sh                <span class="g"># census: who is actually eating RAM</span>
-./memscope.sh guard --dry-run<span class="g"># what it would reap — trust nothing blindly</span>
-./memscope.sh install-guard  <span class="g"># the 2-minute launchd guard</span>
-./memscope.sh summary        <span class="g"># tonight: "ran 334 times · reaped …"</span>
-</code></pre>
-
-  <p>One file. Zero dependencies — <code>ps</code>, <code>sysctl</code>,
-  <code>awk</code>. Read-only until you install the guard. The kill-list is two
-  provable classes and nothing else. MIT.</p>
-
-  <p class="note">If you run Claude Code next to Chrome and VS&nbsp;Code, you very
-  likely have these orphans right now. It’s a
-  <a href="https://github.com/anthropics/claude-code/issues/22612">known</a>
-  <a href="https://github.com/anthropics/claude-code/issues/40667">leak</a>.
-  Dry-run first.</p>
-
-  <p class="foot">
-    <a href="https://github.com/ghodeaniket/memscope">github.com/ghodeaniket/memscope</a>
-    &nbsp;·&nbsp; MIT &nbsp;·&nbsp; a <a href="https://ghodeaniket.github.io/humanroom/">humanroom</a> tool
-  </p>
-</main>
+<div class="go"><div class="wrap">
+  <h2>See your ghosts in five seconds</h2>
+<div class="term"><span class="c"># one file, macOS built-ins only, MIT</span>
+git clone https://github.com/ghodeaniket/memscope && cd memscope
+./memscope.sh                 <span class="k"># census: who is actually eating RAM</span>
+./memscope.sh guard --dry-run <span class="k"># your orphan list — trust nothing blindly</span>
+./memscope.sh install-guard   <span class="k"># launchd runs it every 2 minutes</span></div>
+  <footer>
+    memscope · MIT · <a href="https://github.com/ghodeaniket/memscope">source</a> ·
+    <a href="./story.html">the story it came from</a> · a <a href="https://ghodeaniket.github.io/humanroom/">humanroom</a> tool
+  </footer>
+</div></div>
 </body>
 </html>
