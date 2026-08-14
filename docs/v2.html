@@ -58,6 +58,15 @@
   .band div { background: var(--panel); padding: 1.4rem 1.5rem; }
   .band b { display: block; font-size: 1.9rem; color: var(--num); font-weight: 600; }
   .band span { font-size: 0.75rem; color: var(--dim); }
+  .punch { padding: 3.5rem 0; border-bottom: 1px solid var(--edge); }
+  .punch h2 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(1.5rem, 4vw, 2.2rem); letter-spacing: -0.015em;
+    max-width: 24em; line-height: 1.25;
+  }
+  .punch h2 em { font-style: normal; color: var(--hot); }
+  .punch p { margin-top: 1.1rem; color: var(--dim); max-width: 46em; font-size: 1rem; }
+  .punch p b { color: var(--ink); }
   .spec { padding: 3rem 0; border-bottom: 1px solid var(--edge); }
   .spec h2, .go h2 {
     font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
@@ -122,6 +131,18 @@ pinning <span class="h">~4 GB of swap</span> · invisible to Activity Monitor (n
   <div><b>0</b><span>wrongful kills since</span></div>
   <div><b>3.4 MB</b><span>guard footprint, 0.14s per pass, nothing resident</span></div>
   <div><b>9/9</b><span>tests, incl. one that caught its own false positive</span></div>
+</div></div>
+
+<div class="punch"><div class="wrap">
+  <h2>There are two fixes for this. One costs a couple of thousand dollars.
+  <em>The other is a free shell script.</em></h2>
+  <p>A 64&thinsp;GB machine genuinely solves it — but a lot of that money buys
+  headroom for processes that <b>finished their work days ago</b>. So run the
+  script first. The dry-run is read-only and takes five seconds. If memscope
+  finds nothing, buy the laptop with a clear conscience — at least you'll know
+  the new RAM is going to live work, not ghosts. <b>This page exists because
+  that first pass found 4&thinsp;GB of ghosts — and the upgrade stayed in the
+  cart.</b></p>
 </div></div>
 
 <div class="spec"><div class="wrap">
