@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memscope — the processes killing my Mac were already dead</title>
+<meta name="description" content="A 48-hour debugging story: 41 dead AI sessions pinning 4GB of swap, one guard script, zero rupees spent.">
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1a1a1a; --dim: #6b6b6b; --accent: #b33a1e;
+    --mono-bg: #14161a; --mono-fg: #d8e0ea; --mono-green: #7ee787;
+    --rule: #e2ded6; --card: #f2efe8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101214; --fg: #e6e3dc; --dim: #9a978f; --accent: #ff7a54;
+      --mono-bg: #0a0c0e; --mono-fg: #c8d2dd; --rule: #26292d; --card: #17191c;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 18px/1.65 Georgia, 'Times New Roman', serif;
+    padding: 4rem 1.25rem 5rem;
+  }
+  main { max-width: 42rem; margin: 0 auto; }
+  .kicker {
+    font: 700 0.8rem/1 ui-monospace, 'SF Mono', Menlo, monospace;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    font-size: clamp(1.9rem, 5.5vw, 2.9rem); line-height: 1.15;
+    margin: 0.75rem 0 1.5rem; letter-spacing: -0.01em;
+  }
+  p { margin: 0 0 1.15rem; }
+  .lede { font-size: 1.12em; }
+  em { font-style: italic; }
+  pre {
+    background: var(--mono-bg); color: var(--mono-fg);
+    font: 0.82rem/1.6 ui-monospace, 'SF Mono', Menlo, monospace;
+    padding: 1rem 1.2rem; border-radius: 8px; overflow-x: auto;
+    margin: 1.4rem 0;
+  }
+  pre .g { color: var(--mono-green); }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 1px; background: var(--rule); border: 1px solid var(--rule);
+    border-radius: 10px; overflow: hidden; margin: 2.2rem 0;
+  }
+  .stats div { background: var(--card); padding: 1rem 1.1rem; }
+  .stats b {
+    display: block; font-size: 1.5rem; line-height: 1.2;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  .stats span { font-size: 0.78rem; color: var(--dim); }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 2.4rem 0; }
+  h2 { font-size: 1.25rem; margin: 2rem 0 0.9rem; }
+  a { color: var(--accent); }
+  .foot { font-size: 0.85rem; color: var(--dim); margin-top: 2.5rem; }
+  .note { font-size: 0.9em; color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">memscope · a 48-hour debugging story</p>
+  <h1>My Mac was dying. The processes killing it were already&nbsp;dead.</h1>
+
+  <p class="lede">Monday night: 16&thinsp;GB M4 MacBook&nbsp;Pro, swap at 91%, every click a
+  beachball, macOS throwing <em>“out of application memory”</em> dialogs and
+  force-quitting apps on my behalf. I did what everyone does — I opened the Apple
+  Store and priced a 64&thinsp;GB machine. ₹4,80,000 sat in the cart.</p>
+
+  <p>Then, instead of checking out, I measured.</p>
+
+<pre><code>$ ps -Axo pid,ppid,etime,args | grep mcp
+</code></pre>
+
+  <p><strong>Forty-one process trees whose parent was launchd.</strong> Translation:
+  AI coding sessions I’d closed <em>days ago</em> — each Claude Code session spawns
+  its own private fleet of MCP database connectors — had died without cleaning up
+  their children. launchd adopted the orphans. They sat there idle, invisible to
+  every cleaner app I owned, holding ~600&thinsp;MB of RAM and — the part nobody
+  tells you — <strong>pinning four gigabytes of swap</strong>.</p>
+
+  <p>One kill command. Swap went from 91% to 55% in minutes. The machine exhaled.</p>
+
+  <hr>
+
+  <h2>So I turned the diagnosis into a guard</h2>
+
+  <p>A single shell script that launchd runs every two minutes:</p>
+
+  <p>— <strong>Reap the provably dead.</strong> Connector trees whose session is gone
+  (parented by launchd, older than 2h) get killed. Nothing with a living parent is
+  ever touched.<br>
+  — <strong>Close the abandoned.</strong> A session with zero CPU activity for six
+  straight hours is unread; it gets a graceful TERM. Transcripts are on disk —
+  resume any time, nothing lost.<br>
+  — <strong>Warn before macOS picks victims.</strong> Under real memory pressure it
+  sends one notification naming the actual pigs (“Chrome tabs 4.1G, Claude app 0.9G”)
+  while you can still choose what to close.</p>
+
+  <p class="note">Cost of the guard itself: 3.4&thinsp;MB for 0.14 seconds, every two
+  minutes, nothing resident in between. A memory tool that ran a fat helper daemon
+  all day would be part of the problem.</p>
+
+  <p>Next day, same workload: no force-quit dialogs. No hangs. No beachball.
+  First time in weeks. <strong>The laptop stayed unbought.</strong></p>
+
+  <div class="stats">
+    <div><b>41</b><span>orphaned MCP trees reaped on night one</span></div>
+    <div><b>91→55%</b><span>swap, within minutes of the reap</span></div>
+    <div><b>4&thinsp;GB</b><span>swap that dead processes were pinning</span></div>
+    <div><b>0</b><span>wrongful kills across every pass since</span></div>
+    <div><b>3.4&thinsp;MB</b><span>guard’s peak footprint, 0.14s per pass</span></div>
+    <div><b>9/9</b><span>tests — including one that caught its own false positive</span></div>
+  </div>
+
+  <h2>Run it</h2>
+
+<pre><code>git clone https://github.com/ghodeaniket/memscope
+cd memscope
+./memscope.sh                <span class="g"># census: who is actually eating your RAM</span>
+./memscope.sh guard --dry-run<span class="g"># see what it would reap — trust nothing blindly</span>
+./memscope.sh install-guard  <span class="g"># the 2-minute launchd guard</span>
+./memscope.sh summary        <span class="g"># tonight: "ran 334 times · reaped …"</span>
+</code></pre>
+
+  <p>One file. Zero dependencies — <code>ps</code>, <code>sysctl</code>,
+  <code>awk</code>. Read-only by default; the guard’s kill-list is two provable
+  classes and nothing else. MIT.</p>
+
+  <p class="note">If you run Claude Code or any MCP-speaking agent tooling, you very
+  likely have these orphans right now — it’s a
+  <a href="https://github.com/anthropics/claude-code/issues/22612">known</a>
+  <a href="https://github.com/anthropics/claude-code/issues/40667">leak</a>.
+  The dry-run will show you yours in five seconds.</p>
+
+  <p class="foot">
+    <a href="https://github.com/ghodeaniket/memscope">github.com/ghodeaniket/memscope</a>
+    &nbsp;·&nbsp; MIT &nbsp;·&nbsp; built in 48 hours, tested on the machine it saved
+  </p>
+</main>
+</body>
+</html>
