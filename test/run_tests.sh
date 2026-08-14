@@ -20,7 +20,7 @@ cat > "$FIXTURE" <<'EOF'
   102   101 03:12:30 20480 node /x/node_modules/.bin/mcp-mongo-server
   201 55555 01-02:00:00 20480 node /x/node_modules/.bin/mcp-mysql
   301     1 01:30:00  8192 npm exec mongodb-mcp-server@<3
-  401     1 05:00:00  1024 /bin/bash /Users/admin/development/memscope/memscope.sh guard
+  401     1 05:00:00  1024 /bin/bash /Users/dev/tools/memscope/memscope.sh guard
   501     1 26:10:00  4096 node /x/node_modules/.bin/playwright-mcp
 EOF
 # Extract just ps_snapshot() and find_orphans() from the script and run them

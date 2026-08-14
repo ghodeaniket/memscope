@@ -1,7 +1,19 @@
 # memscope
 
-Memory census for the agent-era Mac. One shot, read-only, zero dependencies —
-`ps`, `sysctl`, `memory_pressure`, `awk`.
+Memory census + pressure guard for the agent-era Mac. Zero dependencies —
+`ps`, `sysctl`, `memory_pressure`, `awk` — one file, MIT licensed.
+
+**Cost of the guard itself: 3.4 MB peak for ~0.14 s every 2 minutes, nothing
+resident in between, 32 KB on disk.** A memory tool that ran a fat helper
+daemon all day would be part of the problem.
+
+Field results from its first 48 hours on a 16 GB M4 MacBook Pro running
+heavy Claude Code + MCP workloads: 41 orphaned MCP connector trees reaped
+(dead sessions had been pinning ~4 GB of swap for days — swap fell 91% → 55%
+within minutes), two day-old idle sessions auto-closed at dawn, one fresh
+leak caught at exactly its 2-hour threshold, zero wrongful kills — and the
+first workday with no out-of-memory force-quit dialogs, hangs, or beachballs
+under an otherwise identical load.
 
 Classic cleaners (CleanMyMac, Activity Monitor) see 60 anonymous `node`
 processes and shrug. Developer machines in 2026 run fleets of MCP servers,
