@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>memscope — Memory guard for the agent-era Mac</title>
+  <meta name="description" content="Reaps leaked MCP servers, closes idle AI sessions, warns before OOM. One file. Zero deps." />
+  <meta property="og:title" content="memscope — Memory guard for the agent-era Mac" />
+  <meta property="og:description" content="Activity Monitor shrugs. Your agents keep leaking. One file. Zero deps." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://memscope.humanroom.app/" />
+  <meta name="theme-color" content="#121410" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #121410;
+      --bg-2: #1a1c16;
+      --ink: #e8eedc;
+      --muted: #9aa38a;
+      --line: rgba(232, 238, 220, 0.12);
+      --accent: #b7d36a;
+      --accent-ink: #14180c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { background: var(--bg); color: var(--ink); }
+    body {
+      font-family: Outfit, ui-sans-serif, system-ui, sans-serif;
+      font-size: 17px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .wrap { width: min(720px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 80px; }
+    header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 72px; }
+    .mark { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 20px; letter-spacing: -0.02em; }
+    .mark a { color: inherit; text-decoration: none; }
+    .eyebrow { color: var(--muted); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+    .eyebrow a { color: inherit; text-decoration: none; }
+    h1 {
+      font-family: Fraunces, Georgia, serif;
+      font-weight: 500;
+      font-size: clamp(34px, 7vw, 58px);
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+      margin: 0 0 20px;
+    }
+    h1 em { font-style: italic; color: var(--accent); }
+    .lede { font-size: 19px; color: var(--muted); max-width: 38em; margin-bottom: 28px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    a.btn {
+      display: inline-flex; align-items: center; min-height: 52px; padding: 0 22px;
+      border-radius: 10px; background: var(--accent); color: var(--accent-ink);
+      font-weight: 600; text-decoration: none;
+    }
+    a.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    .fine { color: var(--muted); font-size: 13px; }
+    pre {
+      margin: 56px 0 0; padding: 22px 24px;
+      background: var(--bg-2); border: 1px solid var(--line); border-radius: 16px;
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 13.5px; line-height: 1.65; overflow-x: auto; color: var(--ink);
+    }
+    pre span { color: var(--muted); }
+    ol.day { margin: 56px 0 0; list-style: none; display: grid; gap: 22px; }
+    ol.day li { display: grid; grid-template-columns: 2.2em 1fr; gap: 8px; align-items: start; }
+    .n { font-family: Fraunces, Georgia, serif; font-style: italic; color: var(--accent); font-size: 22px; }
+    ol.day strong { display: block; margin-bottom: 4px; }
+    ol.day p { color: var(--muted); }
+    .stat {
+      margin: 56px 0 0; padding: 28px;
+      background: var(--bg-2); border: 1px solid var(--line); border-radius: 18px;
+    }
+    .stat h2 { font-family: Fraunces, Georgia, serif; font-size: 15px; font-weight: 500; color: var(--accent); margin-bottom: 12px; }
+    .stat p { font-family: Fraunces, Georgia, serif; font-size: 24px; line-height: 1.3; letter-spacing: -0.02em; }
+    .stat span { display: block; margin-top: 14px; color: var(--muted); font-family: Outfit, sans-serif; font-size: 14px; }
+    footer { margin-top: 64px; color: var(--muted); font-size: 13px; }
+    footer a { color: inherit; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="mark"><a href="https://apps.humanroom.app/">memscope</a></div>
+      <div class="eyebrow"><a href="https://apps.humanroom.app/">Humanroom</a></div>
+    </header>
+
+    <h1>Activity Monitor shrugs.<br /><em>Your agents keep leaking.</em></h1>
+    <p class="lede">A memory census and pressure guard for the agent-era Mac. It reaps orphaned MCP servers, closes idle sessions, and warns before the OOM dialog picks for you. One file. Zero deps.</p>
+
+    <div class="actions">
+      <a class="btn" href="https://github.com/ghodeaniket/memscope">Get the script</a>
+      <a class="btn ghost" href="https://github.com/ghodeaniket/memscope#usage">Usage</a>
+    </div>
+    <p class="fine">MIT. 32 KB on disk. 3.4 MB for 0.14s every two minutes, then nothing resident.</p>
+
+    <section class="stat" aria-label="Field result">
+      <h2>First 48 hours, 16 GB M4</h2>
+      <p>41 orphaned MCP trees reaped. Swap 91% → 55%. Zero wrongful kills. No force-quit dialogs that day.</p>
+      <span>Classic cleaners see 60 anonymous node processes and stop there. memscope knows what an MCP connector is.</span>
+    </section>
+
+    <ol class="day">
+      <li>
+        <span class="n">1</span>
+        <div>
+          <strong>Census by family.</strong>
+          <p>Chrome, Electron, node agents, Java, Python, databases. Who actually eats what.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">2</span>
+        <div>
+          <strong>Reap the dead ones.</strong>
+          <p>Sessions that died and left connectors on launchd. Prints kill lines. Guard can do it for you.</p>
+        </div>
+      </li>
+      <li>
+        <span class="n">3</span>
+        <div>
+          <strong>Warn before OOM.</strong>
+          <p>Under pressure it names the biggest tabs and apps. Idle Claude sessions can auto-close. Nothing with user state is killed.</p>
+        </div>
+      </li>
+    </ol>
+
+    <pre><span># clone, then one pass or install the guard</span>
+git clone https://github.com/ghodeaniket/memscope.git
+cd memscope
+./memscope.sh
+./memscope.sh install-guard</pre>
+
+    <footer>A <a href="https://apps.humanroom.app/">Humanroom</a> app · <a href="https://github.com/ghodeaniket/memscope">github.com/ghodeaniket/memscope</a></footer>
+  </div>
+</body>
+</html>
