@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memscope — the more agents you run, the less Mac you're left with</title>
+<meta name="description" content="Agentic workflows spawn process fleets that outlive their sessions. memscope reaps the dead ones, closes the abandoned, and warns before macOS kills the thread you're working in.">
+<meta property="og:title" content="The more agents you run, the less Mac you're left with.">
+<meta property="og:description" content="Dead agent fleets pin gigabytes of swap. memscope is the census, then the guard.">
+<style>
+  :root {
+    --bg: #0c0e11; --panel: #12151a; --edge: #1f242c;
+    --ink: #dfe6ee; --dim: #7d8894; --hot: #ff5d3a; --ok: #58d68d;
+    --num: #ffd166;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    padding-bottom: 6rem;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; padding: 0 1.25rem; }
+  header {
+    border-bottom: 1px solid var(--edge); padding: 1rem 0;
+    font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim);
+  }
+  header .wrap { display: flex; justify-content: space-between; }
+  header a { color: var(--dim); text-decoration: none; }
+  .hero { padding: 4.5rem 0 3rem; border-bottom: 1px solid var(--edge); }
+  .hero h1 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(2.1rem, 6vw, 3.6rem); line-height: 1.05;
+    letter-spacing: -0.02em; max-width: 18em;
+  }
+  .hero h1 em { font-style: normal; color: var(--hot); }
+  .hero p {
+    margin-top: 1.5rem; max-width: 44em; color: var(--dim); font-size: 1rem;
+  }
+  .hero p b { color: var(--ink); font-weight: 600; }
+  .term {
+    margin-top: 2.2rem; background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 10px; padding: 1.1rem 1.3rem; font-size: 0.83rem; line-height: 1.7;
+    overflow-x: auto; white-space: pre;
+  }
+  .term .c { color: var(--dim); } .term .h { color: var(--hot); } .term .k { color: var(--ok); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1px;
+    background: var(--edge); border-bottom: 1px solid var(--edge); }
+  .cols section { background: var(--bg); padding: 2.2rem 1.5rem; }
+  .cols .n { color: var(--hot); font-size: 0.8rem; letter-spacing: 0.1em; }
+  .cols h2 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1.15rem; margin: 0.5rem 0 0.7rem; letter-spacing: -0.01em;
+  }
+  .cols p { color: var(--dim); font-size: 0.9rem; }
+  .cols p b { color: var(--ink); }
+  .band { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 1px; background: var(--edge); border-bottom: 1px solid var(--edge); }
+  .band div { background: var(--panel); padding: 1.4rem 1.5rem; }
+  .band b { display: block; font-size: 1.9rem; color: var(--num); font-weight: 600; }
+  .band span { font-size: 0.75rem; color: var(--dim); }
+  .spec { padding: 3rem 0; border-bottom: 1px solid var(--edge); }
+  .spec h2, .go h2 {
+    font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 1.5rem; letter-spacing: -0.01em; margin-bottom: 1.4rem;
+  }
+  .spec dl { display: grid; gap: 1.1rem; max-width: 46rem; }
+  .spec dt { color: var(--ok); font-weight: 600; }
+  .spec dd { color: var(--dim); margin: 0.15rem 0 0; font-size: 0.92rem; }
+  .spec dd b { color: var(--ink); }
+  .safety { margin-top: 1.8rem; padding: 1rem 1.3rem; border-left: 3px solid var(--hot);
+    background: var(--panel); font-size: 0.88rem; color: var(--dim); max-width: 44rem; }
+  .safety b { color: var(--ink); }
+  .go { padding: 3rem 0; }
+  footer { color: var(--dim); font-size: 0.78rem; padding-top: 2.5rem; }
+  a { color: var(--ok); }
+</style>
+</head>
+<body>
+<header><div class="wrap"><span>memscope</span>
+  <span><a href="./">the 48-hour story</a> · <a href="https://github.com/ghodeaniket/memscope">github</a></span>
+</div></header>
+
+<div class="hero"><div class="wrap">
+  <h1>The more agents you run, the <em>less Mac</em> you're left&nbsp;with.</h1>
+  <p>Agentic development scales sideways: every session spawns its own fleet of
+  tool servers, connectors, and headless browsers. The sessions end.
+  <b>The fleets don't.</b> By midweek the machine is sand, macOS starts
+  force-quitting on its own judgment — and it doesn't kill politely.
+  <b>It kills the thread you were working in</b>: the session holding three hours
+  of context, the agent mid-migration, the reasoning you can't re-prompt.</p>
+<div class="term"><span class="c">$ ./memscope.sh guard --dry-run</span>
+<span class="h">41 orphaned agent-tool trees</span> · parent: launchd · age: up to 3 days
+pinning <span class="h">~4 GB of swap</span> · invisible to Activity Monitor (named <span class="c">node</span>) and every cleaner app
+<span class="k">→ would reap all 41 · live sessions untouched</span></div>
+</div></div>
+
+<div class="cols"><div class="wrap" style="display:contents">
+  <section><span class="n">01 · THE PATTERN</span>
+    <h2>You scale the workflow</h2>
+    <p>More agents, more subagents, more tools. Whatever the framework —
+    each session is really a <b>process fleet</b>: connectors, MCP servers,
+    watchers, browsers. Fleet size × open sessions is your real footprint.</p>
+  </section>
+  <section><span class="n">02 · THE DECAY</span>
+    <h2>The machine turns to sand</h2>
+    <p>Sessions end; children get orphaned and idle forever. RAM fills with
+    <b>finished work</b>, swap grows to hold it, and every click pays a
+    paging tax. It reads as "my Mac is old." It isn't.</p>
+  </section>
+  <section><span class="n">03 · THE COST</span>
+    <h2>Force-quit hell — lost threads</h2>
+    <p>At the ceiling, macOS picks victims. The beachball is annoying;
+    <b>losing state is expensive</b> — the long-running agent, the context
+    you built all morning. That's the bill nobody itemizes.</p>
+  </section>
+</div></div>
+
+<div class="band"><div class="wrap" style="display:contents">
+  <div><b>41</b><span>dead agent-tool trees, first pass on one 16 GB M4</span></div>
+  <div><b>91→55%</b><span>swap, minutes after the reap</span></div>
+  <div><b>4 GB</b><span>swap those dead fleets were pinning</span></div>
+  <div><b>0</b><span>wrongful kills since</span></div>
+  <div><b>3.4 MB</b><span>guard footprint, 0.14s per pass, nothing resident</span></div>
+  <div><b>9/9</b><span>tests, incl. one that caught its own false positive</span></div>
+</div></div>
+
+<div class="spec"><div class="wrap">
+  <h2>memscope: the census, then the guard</h2>
+  <dl>
+    <dt>reap the provably dead</dt>
+    <dd>Tool trees whose session is gone — parented by launchd, older than 2h —
+    are killed on sight. <b>Nothing with a living parent is ever touched.</b></dd>
+    <dt>close the abandoned</dt>
+    <dd>A session with zero CPU for six straight hours is unread. Graceful TERM,
+    notification, transcripts stay on disk — <b>resume anytime, nothing lost.</b></dd>
+    <dt>warn before macOS picks victims</dt>
+    <dd>Under real pressure it names the actual consumers ("Chrome tabs 4.1G,
+    Claude app 0.9G") <b>while you can still choose</b> what to close — instead of
+    macOS choosing for you.</dd>
+  </dl>
+  <div class="safety"><b>Safety contract:</b> the kill-list is exactly two provable
+  classes — dead fleets and 6h-zero-CPU sessions. Everything else is advice.
+  Dry-run shows you every intended kill before you grant it anything.</div>
+</div></div>
+
+<div class="go"><div class="wrap">
+  <h2>See your ghosts in five seconds</h2>
+<div class="term"><span class="c"># one file, macOS built-ins only, MIT</span>
+git clone https://github.com/ghodeaniket/memscope && cd memscope
+./memscope.sh                 <span class="k"># census: who is actually eating RAM</span>
+./memscope.sh guard --dry-run <span class="k"># your orphan list — trust nothing blindly</span>
+./memscope.sh install-guard   <span class="k"># launchd runs it every 2 minutes</span></div>
+  <footer>
+    memscope · MIT · <a href="https://github.com/ghodeaniket/memscope">source</a> ·
+    <a href="./">the story it came from</a> · a <a href="https://ghodeaniket.github.io/humanroom/">humanroom</a> tool
+  </footer>
+</div></div>
+</body>
+</html>
