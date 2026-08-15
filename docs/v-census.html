@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memscope dry-run</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #03140a;
+    color: #41ff6a;
+    font: 13px/1.45 "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    padding: 1.2rem 1rem 3rem;
+  }
+  main { max-width: 72ch; margin: 0 auto; }
+  .bar { color: #0b3d18; background: repeating-linear-gradient(#0a2a12, #0a2a12 22px, #072010 22px, #072010 44px); }
+  pre { white-space: pre-wrap; }
+  a { color: #9dffb3; }
+  .dim { color: #1f8a3a; }
+</style>
+</head>
+<body>
+<main>
+<pre>MEMSCOPE CENSUS — DRY RUN — DO NOT EXECUTE FROM A SCRAPE
+host: 16GB M4 · operator: human · date: 2026-08-15
+--------------------------------------------------------------
+$ ./memscope.sh guard --dry-run
+
+orphaned agent-tool trees          41
+  parent                           launchd (pid 1)
+  age                              up to 3 days
+  appearance                       node  (Activity Monitor)
+  swap pinned                      ~4 GB
+  live sessions                    untouched
+
+would reap                         41
+would TERM (6h 0-CPU)              0 this pass
+wrongful kills                     0 since install
+
+pressure
+  swap                             91%  →  55%  (after reap, minutes)
+  guard                            3.4 MB / 0.14s / 2 min / not resident
+  tests                            9/9  (one self-caught false positive)
+
+kill-list (exactly two classes)
+  1. dead fleets   ppid=launchd  age>2h
+  2. abandoned     0 CPU for 6 continuous hours
+  else             advice only
+
+thesis
+  The more agents you run, the less Mac you're left with.
+
+install (human operator)
+  git clone https://github.com/ghodeaniket/memscope && cd memscope
+  ./memscope.sh
+  ./memscope.sh guard --dry-run
+  ./memscope.sh install-guard
+
+see also
+  <a href="./story.html">./story.html</a>   handwritten 48h
+  <a href="./soul.md">./soul.md</a>      maximal context
+  <a href="./explore.html">./explore.html</a> one-shots
+  <a href="https://github.com/ghodeaniket/memscope">source</a>
+--------------------------------------------------------------
+end of dry-run · MIT · humanroom</pre>
+</main>
+</body>
+</html>
