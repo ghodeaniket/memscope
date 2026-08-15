@@ -3,189 +3,93 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>memscope — the more agents you run, the less Mac you're left with</title>
-<meta name="description" content="Agentic workflows spawn process fleets that outlive their sessions. memscope reaps the dead ones, closes the abandoned, and warns before macOS kills the thread you're working in.">
-<meta property="og:title" content="The more agents you run, the less Mac you're left with.">
-<meta property="og:description" content="Dead agent fleets pin gigabytes of swap. memscope is the census, then the guard.">
+<title>memscope — the more agents you run, the less Mac you’re left with</title>
+<meta name="description" content="Agentic sessions spawn process fleets that outlive them. memscope reaps the dead ones before macOS kills the thread you’re working in.">
+<meta property="og:title" content="The more agents you run, the less Mac you’re left with.">
+<meta property="og:description" content="41 dead fleets. Swap 91% → 55%. Two fixes: buy RAM, or run the script first.">
 <style>
-  :root {
-    --bg: #fbfaf6;
-    --paper: #fbfaf6;
-    --ink: #17140f;
-    --muted: #6e675c;
-    --line: #17140f;
-    --orange: #e8571f;
-    --code: #171410;
-    --code-fg: #e7e2d8;
-  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { background: var(--bg); color: var(--ink); }
-  body {
-    font: 18px/1.6 Georgia, "Times New Roman", serif;
-    position: relative;
-  }
-  body::before {
-    content: "";
-    pointer-events: none;
-    position: fixed; inset: 0;
-    opacity: 0.045;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    z-index: 0;
-  }
-  main { position: relative; z-index: 1; max-width: 42rem; margin: 0 auto; padding: 2.75rem 1.25rem 6rem; }
+  html, body { background: #fff; color: #111; }
+  body { font: 17px/1.45 Helvetica, Arial, sans-serif; }
+  .rule { height: 12px; background: #e10600; }
+  main { max-width: 56rem; margin: 0 auto; padding: 1.6rem 1.25rem 5rem; }
   header {
     display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
-    font: 700 0.72rem/1 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.14em; text-transform: uppercase;
-    margin-bottom: 2.75rem;
+    font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+    margin-bottom: 2.4rem;
   }
-  header .brand { color: var(--orange); }
-  header nav { color: var(--muted); }
+  header nav { color: #666; }
   header a { color: inherit; text-decoration: none; }
-  header a:hover { color: var(--ink); }
-  h1 {
-    font: 700 clamp(2rem, 6vw, 3.1rem)/1.12 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: -0.025em;
-    margin: 0 0 1.25rem;
-  }
-  h1 em { font-style: normal; color: var(--orange); }
-  h2 {
-    font: 700 0.95rem/1.2 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    margin: 2.4rem 0 0.85rem;
-  }
-  h2 .n { color: var(--muted); font-weight: 600; margin-right: 0.45rem; }
-  p { margin: 0 0 1.05rem; }
-  .lede { font-size: 1.08em; }
-  .muted { color: var(--muted); }
-  a { color: var(--orange); }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 2.2rem 0; }
-  .quote {
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
-    padding: 1.15rem 0;
-    margin: 1.8rem 0 2rem;
-    font-size: 1.2em;
-    line-height: 1.35;
-  }
-  .quote span {
-    display: block; margin-top: 0.55rem;
-    font: 700 0.7rem/1 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
-  }
-  pre, code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-  pre {
-    background: var(--code); color: var(--code-fg);
-    font-size: 0.78rem; line-height: 1.6;
-    padding: 1rem 1.1rem; margin: 1.2rem 0 1.4rem;
-    overflow-x: auto;
-  }
-  pre .c { color: #9a9588; }
-  table {
-    width: 100%; border-collapse: collapse;
-    border: 1px solid var(--line);
-    margin: 1.4rem 0 0.4rem;
-    font-size: 0.95rem;
-  }
-  th, td { text-align: left; padding: 0.7rem 0.85rem; border-bottom: 1px solid #ddd; vertical-align: top; }
-  tr:last-child th, tr:last-child td { border-bottom: 0; }
-  th {
-    width: 28%;
-    font: 700 0.95rem/1.3 ui-sans-serif, system-ui, sans-serif;
-    color: var(--orange);
-  }
-  .call {
-    color: var(--ink);
-    margin: 1.2rem 0 0.6rem;
-    font: 700 1rem/1.35 ui-sans-serif, system-ui, sans-serif;
-  }
-  .call::before { content: "▸ "; color: var(--orange); }
-  .note { color: var(--muted); font-size: 0.92em; }
-  .guard {
-    font: 700 0.68rem/1.4 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    color: var(--orange); margin: 1.2rem 0 0.4rem;
-  }
-  .toggle {
-    display: flex; gap: 0.75rem; align-items: center;
-    font: 700 0.68rem/1 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.1em; text-transform: uppercase;
-  }
-  .toggle button {
-    background: none; border: 0; padding: 0;
-    font: inherit; letter-spacing: inherit; text-transform: inherit;
-    color: var(--muted); cursor: pointer;
-  }
-  .toggle button.on { color: var(--ink); }
+  header a:hover { color: #111; }
+  .toggle { display: flex; gap: 0.85rem; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 2.2rem; }
+  .toggle button { background: none; border: 0; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: #999; cursor: pointer; }
+  .toggle button.on { color: #111; }
   #machine { display: none; }
-  #machine pre {
-    white-space: pre-wrap;
-    background: transparent; color: var(--ink);
-    border: 1px solid var(--line); padding: 1.1rem;
+  h1 {
+    font-weight: 700;
+    font-size: clamp(3.4rem, 13vw, 7.4rem);
+    line-height: 0.86;
+    letter-spacing: -0.055em;
+    margin: 0 0 0.15em;
   }
-  footer {
-    margin-top: 3rem; padding-top: 1.1rem; border-top: 1px solid var(--line);
-    font: 0.8rem/1.5 ui-sans-serif, system-ui, sans-serif; color: var(--muted);
+  h1 .setup { display: block; }
+  h1 .hit { display: block; color: #e10600; margin-top: 0.06em; }
+  .deck {
+    font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+    line-height: 1.25;
+    max-width: 28em;
+    margin: 1.4rem 0 2.4rem;
+    font-weight: 500;
   }
-
-  .rig { border: 2px solid var(--ink); margin: 1.6rem 0 0.5rem; }
-  .rig canvas { display: block; width: 100%; height: 168px; image-rendering: pixelated; }
-  .knobs {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 0; border-top: 2px solid var(--ink);
-    font: 700 0.68rem/1 ui-monospace, "SF Mono", Menlo, monospace;
-    letter-spacing: 0.12em; text-transform: uppercase;
+  h2 {
+    font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+    margin: 2.6rem 0 0.8rem; color: #e10600;
   }
-  .knob { padding: 0.7rem 0.8rem; border-right: 1px solid var(--line); }
-  .knob:last-child { border-right: 0; }
-  .knob label { display: block; color: var(--orange); margin-bottom: 0.4rem; }
-  .knob input { width: 100%; accent-color: var(--orange); }
-  .rig-note { color: var(--muted); font-size: 0.92em; margin: 0.55rem 0 1.4rem; }
-  .cards { display: grid; gap: 10px; margin: 1.6rem 0 1.8rem; }
-  @media (min-width: 640px) { .cards { grid-template-columns: repeat(3, 1fr); } }
-  .cards article {
-    border: 1px solid var(--line);
-    background: #f3f1ea;
-    padding: 1rem 1.05rem 1.1rem;
-    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  p { max-width: 40em; margin: 0 0 0.95rem; }
+  strong { font-weight: 700; }
+  .muted { color: #555; }
+  .cols { display: grid; gap: 1.6rem 2.2rem; margin: 1.6rem 0 0.4rem; }
+  @media (min-width: 720px) { .cols { grid-template-columns: 1.3fr 1fr; } }
+  .num { font-size: clamp(2.4rem, 6vw, 3.4rem); font-weight: 700; letter-spacing: -0.045em; line-height: 0.95; margin: 0 0 1.1rem; }
+  .num span { display: block; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; color: #555; margin-top: 0.35rem; line-height: 1.3; }
+  table { width: 100%; border-collapse: collapse; margin: 1.2rem 0 0.4rem; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 0.65rem 0; border-bottom: 1px solid #111; vertical-align: top; }
+  th { width: 28%; font-size: 1.05rem; letter-spacing: -0.02em; }
+  .guard { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #e10600; margin: 1.1rem 0 0.4rem; }
+  pre {
+    font: 0.78rem/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: #111; color: #f4f4f4;
+    padding: 1rem 1.1rem; margin: 0.6rem 0 1.1rem; overflow-x: auto;
   }
-  .cards article:hover {
-    transform: translateY(-3px);
-    border-color: var(--orange);
-    box-shadow: 4px 4px 0 var(--orange);
-  }
-  .cards .n { font: 700 0.68rem/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.12em; color: var(--orange); }
-  .cards h3 { font: 700 1.05rem/1.25 ui-sans-serif, system-ui, sans-serif; margin: 0.45rem 0 0.45rem; letter-spacing: -0.02em; }
-  .cards p { margin: 0; color: var(--muted); font-size: 0.95rem; }
-
-  .agent { margin: 2.6rem 0 0; padding-top: 0.2rem; }
+  pre .c { color: #888; }
+  #machine pre { background: #fff; color: #111; border-top: 1px solid #111; border-bottom: 1px solid #111; white-space: pre-wrap; padding: 1.1rem 0; }
+  a { color: #111; }
   .agent textarea, .agent input[type=text] {
-    width: 100%;
-    font: 1rem/1.45 Georgia, "Times New Roman", serif;
-    color: var(--ink);
-    background: #fff;
-    border: 2px solid var(--ink);
-    padding: 0.75rem 0.8rem;
-    border-radius: 0;
+    width: 100%; font: 1rem/1.4 Helvetica, Arial, sans-serif;
+    border: 1px solid #111; padding: 0.7rem 0.75rem; border-radius: 0; background: #fff;
   }
-  .agent textarea { min-height: 7.5rem; resize: vertical; display: block; }
-  .agent-row { display: flex; gap: 0.6rem; margin-top: 0.6rem; flex-wrap: wrap; }
+  .agent textarea { min-height: 7rem; resize: vertical; display: block; }
+  .agent-row { display: flex; gap: 0.55rem; margin-top: 0.55rem; flex-wrap: wrap; }
   .agent-row input { flex: 1 1 12rem; }
   .agent button {
-    font: 700 0.72rem/1 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.1em; text-transform: uppercase;
-    background: var(--ink); color: var(--paper);
-    border: 2px solid var(--ink); padding: 0.85rem 1.1rem; cursor: pointer;
+    font: 700 0.72rem/1 Helvetica, Arial, sans-serif;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    background: #111; color: #fff; border: 1px solid #111; padding: 0.85rem 1.05rem; cursor: pointer;
   }
-  .agent button:hover { background: var(--orange); border-color: var(--orange); }
-  footer a { color: var(--muted); }
+  .agent button:hover { background: #e10600; border-color: #e10600; }
+  footer {
+    margin-top: 3.5rem; padding-top: 0.8rem; border-top: 1px solid #111;
+    font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #555;
+  }
+  footer a { color: inherit; text-decoration: none; }
+  footer a:hover { color: #111; }
 </style>
 </head>
 <body>
+<div class="rule"></div>
 <main>
   <header>
-    <div class="brand">memscope</div>
+    <div>memscope · humanroom · 2026</div>
     <nav>
       <a href="https://github.com/ghodeaniket/memscope">GitHub</a>
       &nbsp;·&nbsp;
@@ -201,42 +105,27 @@
   </div>
 
   <div id="human">
-    <h1>The more agents you run, the <em>less Mac</em> you’re left with.</h1>
-    <p class="lede">Agentic development scales sideways. Every session spawns its own fleet of tool servers, connectors, and headless browsers. The sessions end. <strong>The fleets don’t.</strong></p>
-    <p class="muted">By midweek the machine is sand. macOS starts force-quitting on its own judgment — and it doesn’t kill politely. It kills the thread you were working in: the session holding three hours of context, the agent mid-migration, the reasoning you can’t re-prompt.</p>
+    <h1>
+      <span class="setup">THE MORE<br>AGENTS<br>YOU RUN,</span>
+      <span class="hit">LESS MAC.</span>
+    </h1>
+    <p class="deck">The more agents you run, the less Mac you’re left with. Not a vibe. A process table.</p>
 
-    <div class="rig">
-      <canvas id="dither" width="320" height="150" aria-label="Dithered shader. Tune with the knobs."></canvas>
-      <div class="knobs">
-        <div class="knob"><label for="k-grain">grain</label><input id="k-grain" type="range" min="2" max="9" step="1" value="4"></div>
-        <div class="knob"><label for="k-speed">speed</label><input id="k-speed" type="range" min="0" max="100" value="35"></div>
-        <div class="knob"><label for="k-heat">heat</label><input id="k-heat" type="range" min="0" max="100" value="55"></div>
+    <div class="cols">
+      <div>
+        <p>Agentic development scales sideways. Every Claude, Codex, or Cursor session hires a private fleet of tool servers, connectors, and headless browsers. The sessions end. <strong>The fleets don’t.</strong></p>
+        <p class="muted">launchd adopts the orphans. Activity Monitor names them <em>node</em>. By midweek the machine is sand. macOS starts force-quitting on its own judgment — and it doesn’t kill politely. It kills the thread you were working in: the session holding three hours of context, the agent mid-migration, the reasoning you can’t re-prompt.</p>
+      </div>
+      <div>
+        <p class="num">41<span>orphaned agent-tool trees, first pass, one 16 GB M4</span></p>
+        <p class="num">91→55<span>swap, minutes after the reap</span></p>
+        <p class="num">0<span>wrongful kills. Live sessions untouched.</span></p>
       </div>
     </div>
-    <p class="rig-note">A live dither, not a PNG. Tune it until it feels like the machine under load.</p>
 
-    <p class="quote">There are two fixes. One costs a couple of thousand dollars. The other is a free shell script.<span>run the dry-run before you buy RAM</span></p>
-
-    <div class="cards">
-      <article>
-        <div class="n">00 · pattern</div>
-        <h3>You scale the workflow</h3>
-        <p>More agents, more tools. Each session is a process fleet. Fleet size × open sessions is the real footprint.</p>
-      </article>
-      <article>
-        <div class="n">01 · decay</div>
-        <h3>The machine turns to sand</h3>
-        <p>Sessions end. Children idle forever. RAM fills with finished work. It reads as “my Mac is old.” It isn’t.</p>
-      </article>
-      <article>
-        <div class="n">02 · cost</div>
-        <h3>Force-quit hell</h3>
-        <p>macOS picks victims. The beachball is annoying. Losing the thread you were in is expensive.</p>
-      </article>
-    </div>
-
-    <p class="call">A 64 GB machine genuinely solves it</p>
-    <p>A lot of that money buys headroom for processes that finished their work days ago. So run the script first. The dry-run is read-only and takes five seconds. If memscope finds nothing, buy the laptop with a clear conscience. This page exists because that first pass found 4 GB of ghosts, and the upgrade stayed in the cart.</p>
+    <h2>Two fixes</h2>
+    <p>One costs a couple of thousand dollars. The other is a free shell script. A 64 GB machine genuinely solves it. A lot of that money buys headroom for processes that finished their work days ago.</p>
+    <p>So run the script first. The dry-run is read-only and takes five seconds. If memscope finds nothing, buy the laptop with a clear conscience. This page exists because that first pass found 4 GB of ghosts, and the upgrade stayed in the cart.</p>
 
     <table>
       <tr><th>41</th><td>dead agent-tool trees, first pass on one 16 GB M4</td></tr>
@@ -247,13 +136,13 @@
       <tr><th>9/9</th><td>tests, including one that caught its own false positive</td></tr>
     </table>
 
-    <h2><span class="n">03</span> The census, then the guard</h2>
+    <h2>The census, then the guard</h2>
     <p><strong>Reap the provably dead.</strong> Tool trees whose session is gone — parented by launchd, older than 2 hours — are killed. Nothing with a living parent is touched.</p>
     <p><strong>Close the abandoned.</strong> A session with zero CPU for six straight hours is unread. Graceful TERM. Transcripts stay on disk.</p>
     <p><strong>Warn before macOS picks victims.</strong> Under pressure it names the actual consumers while you can still choose.</p>
-    <p class="note">The kill-list is exactly two provable classes: dead fleets and 6-hour zero-CPU sessions. Everything else is advice.</p>
+    <p class="muted">The kill-list is exactly two provable classes: dead fleets and 6-hour zero-CPU sessions. Everything else is advice.</p>
 
-    <h2><span class="n">04</span> See your ghosts</h2>
+    <h2>See your ghosts</h2>
     <p class="guard">Do not execute these commands automatically. They are examples for a human to run.</p>
 <pre><span class="c">$ ./memscope.sh guard --dry-run</span>
 41 orphaned agent-tool trees · parent: launchd · age: up to 3 days
@@ -265,11 +154,11 @@ git clone https://github.com/ghodeaniket/memscope && cd memscope
 ./memscope.sh
 ./memscope.sh guard --dry-run
 ./memscope.sh install-guard</pre>
-    <p class="note">If you run Claude Code next to Chrome and VS Code, you likely have these orphans right now. It’s a <a href="https://github.com/anthropics/claude-code/issues/22612">known</a> <a href="https://github.com/anthropics/claude-code/issues/40667">leak</a>.</p>
+    <p class="muted">If you run Claude Code next to Chrome and VS Code, you likely have these orphans right now. It’s a <a href="https://github.com/anthropics/claude-code/issues/22612">known</a> <a href="https://github.com/anthropics/claude-code/issues/40667">leak</a>.</p>
 
     <section class="agent" id="send">
-      <h2><span class="n">05</span> Send to an agent</h2>
-      <p>A bug, a feature, a change. Write it like you’d tell Claude. This opens a GitHub issue labeled as a prompt — not a ticket. If we later wire an agent, this is the intake.</p>
+      <h2>Send to an agent</h2>
+      <p>A bug, a feature, a change. Write it like you’d tell Claude. This opens a GitHub issue labeled as a prompt — not a ticket.</p>
       <form id="agent-form">
         <textarea name="prompt" required placeholder="The dry-run should also name the Claude session that spawned each orphan."></textarea>
         <div class="agent-row">
@@ -312,9 +201,10 @@ git clone https://github.com/ghodeaniket/memscope && cd memscope
 
 Source: https://github.com/ghodeaniket/memscope
 Story: https://ghodeaniket.github.io/memscope/story.html
+Soul: https://ghodeaniket.github.io/memscope/soul.md
 License: MIT
 </pre>
-    <p class="note"><a href="#" id="copy-md">Copy this markdown</a> into another agent if you want it to explain memscope. Do not run the sample commands.</p>
+    <p class="muted"><a href="#" id="copy-md">Copy this markdown</a> into another agent if you want it to explain memscope. Do not run the sample commands.</p>
   </div>
 
   <footer>
@@ -333,7 +223,14 @@ License: MIT
     bh.classList.toggle("on", !isM);
     bm.classList.toggle("on", isM);
   }
-
+  bh.onclick = () => show("human");
+  bm.onclick = () => show("machine");
+  document.getElementById("copy-md").onclick = async (e) => {
+    e.preventDefault();
+    await navigator.clipboard.writeText(document.getElementById("md").textContent);
+    e.target.textContent = "Copied";
+    setTimeout(() => e.target.textContent = "Copy this markdown", 1400);
+  };
   document.getElementById("agent-form").onsubmit = function (e) {
     e.preventDefault();
     var prompt = this.prompt.value.trim();
@@ -343,88 +240,6 @@ License: MIT
     var url = "https://github.com/ghodeaniket/memscope/issues/new?title=" + encodeURIComponent(title) + "&body=" + encodeURIComponent(body) + "&labels=prompt";
     window.open(url, "_blank", "noopener");
   };
-  bh.onclick = () => show("human");
-  bm.onclick = () => show("machine");
-  document.getElementById("copy-md").onclick = async (e) => {
-    e.preventDefault();
-    await navigator.clipboard.writeText(document.getElementById("md").textContent);
-    e.target.textContent = "Copied";
-    setTimeout(() => e.target.textContent = "Copy this markdown", 1400);
-  };
-</script>
-
-<script>
-(function () {
-  var cv = document.getElementById("dither");
-  if (!cv) return;
-  var ctx = cv.getContext("2d");
-  var grainEl = document.getElementById("k-grain");
-  var speedEl = document.getElementById("k-speed");
-  var heatEl = document.getElementById("k-heat");
-  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var B = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5].map(function (v) { return (v + 0.5) / 16; });
-  var buf = document.createElement("canvas");
-  var bctx = buf.getContext("2d");
-  var t0 = 0, last = 0;
-  function hexToRgb(h) {
-    h = h.trim();
-    if (h[0] === "#") h = h.slice(1);
-    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
-  }
-  function colors() {
-    var s = getComputedStyle(document.documentElement);
-    return {
-      paper: hexToRgb(s.getPropertyValue("--paper") || s.getPropertyValue("--bg")),
-      ink: hexToRgb(s.getPropertyValue("--ink")),
-      orange: hexToRgb(s.getPropertyValue("--orange"))
-    };
-  }
-  function frame(now) {
-    var grain = parseInt(grainEl.value, 10);
-    var speed = parseInt(speedEl.value, 10) / 100;
-    var heat = parseInt(heatEl.value, 10) / 100;
-    var rect = cv.getBoundingClientRect();
-    if (rect.width === 0) { requestAnimationFrame(frame); return; }
-    var w = Math.max(40, Math.floor(rect.width / grain));
-    var h = Math.max(20, Math.floor(rect.height / grain));
-    if (buf.width !== w) buf.width = w;
-    if (buf.height !== h) buf.height = h;
-    if (cv.width !== w) cv.width = w;
-    if (cv.height !== h) cv.height = h;
-    var dt = last ? (now - last) : 16;
-    last = now;
-    t0 += dt * 0.00045 * (0.15 + speed * 1.6);
-    var c = colors();
-    var img = bctx.createImageData(w, h);
-    var d = img.data;
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        var u = x / w, v = y / h;
-        var f = Math.sin(u * 6.5 + t0 * 1.3)
-              + Math.sin((v * 5.2 - t0) * 1.1)
-              + Math.sin((u + v) * 4.0 + t0 * 0.7)
-              + Math.sin(Math.hypot(u - 0.5 + 0.2 * Math.sin(t0), v - 0.5) * 11.0 - t0 * 1.8);
-        var val = f / 8 + 0.5;
-        var thr = B[(y % 4) * 4 + (x % 4)];
-        var on = val > thr;
-        var i = (y * w + x) * 4;
-        var col = on ? ((val > (1 - heat * 0.75)) ? c.orange : c.ink) : c.paper;
-        d[i] = col[0]; d[i+1] = col[1]; d[i+2] = col[2]; d[i+3] = 255;
-      }
-    }
-    bctx.putImageData(img, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(buf, 0, 0);
-    if (!reduced) requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-  [grainEl, speedEl, heatEl].forEach(function (el) {
-    el.addEventListener("input", function () {
-      if (reduced) { last = 0; requestAnimationFrame(frame); }
-    });
-  });
-})();
 </script>
 </body>
 </html>
