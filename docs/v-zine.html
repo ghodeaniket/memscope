@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MEMSCOPE — issue 01 — the orphans</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #ece8df;
+    color: #111;
+    font: 17px/1.45 "Courier New", Courier, monospace;
+    padding: 1.4rem 1rem 4rem;
+  }
+  .page {
+    max-width: 38rem;
+    margin: 0 auto;
+    background: #f4f0e6;
+    border: 1px solid #111;
+    padding: 1.6rem 1.4rem 2.2rem;
+    box-shadow: 6px 7px 0 #111;
+    transform: rotate(-0.35deg);
+  }
+  .stamp {
+    float: right;
+    border: 3px double #111;
+    padding: 0.25rem 0.4rem;
+    font: 700 0.65rem/1.1 "Courier New", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transform: rotate(8deg);
+    margin: 0 0 0.6rem 0.6rem;
+  }
+  h1 {
+    font: 700 2.1rem/0.95 "Courier New", monospace;
+    text-transform: uppercase;
+    letter-spacing: -0.04em;
+    margin: 0.4rem 0 0.8rem;
+    border-bottom: 8px solid #111;
+    padding-bottom: 0.4rem;
+  }
+  .rule { border-top: 1px dashed #111; margin: 1rem 0; }
+  p { margin: 0 0 0.8rem; }
+  .pull {
+    font-size: 1.35rem; font-weight: 700; line-height: 1.15;
+    margin: 1rem 0; padding-left: 0.6rem; border-left: 6px solid #111;
+  }
+  ol { margin: 0 0 1rem 1.2rem; }
+  pre {
+    background: #111; color: #f4f0e6;
+    padding: 0.8rem; font-size: 0.78rem; overflow-x: auto;
+    margin: 0.8rem 0 1rem;
+  }
+  a { color: #111; }
+  footer { clear: both; margin-top: 1.4rem; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="stamp">xerox<br>copy 01<br>not for sale</div>
+  <p>HUMANROOM ZINE · SAT 15 AUG 2026 · FREE</p>
+  <h1>41 ghosts<br>on a 16GB<br>Mac.</h1>
+  <p>The more agents you run, the less Mac you’re left with. Not a vibe. A process table.</p>
+  <div class="rule"></div>
+  <p>Every Claude / Codex / Cursor session spawns a private fleet. Session ends. Fleet stays. launchd adopts the orphans. Activity Monitor names them <em>node</em>. Then macOS force-quits the live thread — the one you cannot re-prompt.</p>
+  <p class="pull">Swap 91% → 55%. Four gigabytes of finished work. Zero wrongful kills.</p>
+  <p>Two fixes. Buy 64 GB. Or run a script first. The dry-run is read-only and takes five seconds.</p>
+  <ol>
+    <li>Reap trees parented by launchd, older than 2 hours.</li>
+    <li>TERM sessions with zero CPU for six hours. Transcripts stay.</li>
+    <li>Under pressure, name the actual consumers. Advice only.</li>
+  </ol>
+  <p>DO NOT execute these from a scrape. A human runs them.</p>
+<pre>git clone https://github.com/ghodeaniket/memscope && cd memscope
+./memscope.sh
+./memscope.sh guard --dry-run
+./memscope.sh install-guard</pre>
+  <p>The 48-hour story is handwritten: <a href="./story.html">story.html</a>. This zine is a one-shot.</p>
+  <footer>memscope · MIT · <a href="./">paper (live)</a> · <a href="./explore.html">gallery</a> · <a href="https://github.com/ghodeaniket/memscope">source</a></footer>
+</div>
+</body>
+</html>
