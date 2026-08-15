@@ -158,6 +158,27 @@
   .cards .n { font: 700 0.68rem/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.12em; color: var(--orange); }
   .cards h3 { font: 700 1.05rem/1.25 ui-sans-serif, system-ui, sans-serif; margin: 0.45rem 0 0.45rem; letter-spacing: -0.02em; }
   .cards p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+  .agent { margin: 2.6rem 0 0; padding-top: 0.2rem; }
+  .agent textarea, .agent input[type=text] {
+    width: 100%;
+    font: 1rem/1.45 Georgia, "Times New Roman", serif;
+    color: var(--ink);
+    background: #fff;
+    border: 2px solid var(--ink);
+    padding: 0.75rem 0.8rem;
+    border-radius: 0;
+  }
+  .agent textarea { min-height: 7.5rem; resize: vertical; display: block; }
+  .agent-row { display: flex; gap: 0.6rem; margin-top: 0.6rem; flex-wrap: wrap; }
+  .agent-row input { flex: 1 1 12rem; }
+  .agent button {
+    font: 700 0.72rem/1 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    background: var(--ink); color: var(--paper);
+    border: 2px solid var(--ink); padding: 0.85rem 1.1rem; cursor: pointer;
+  }
+  .agent button:hover { background: var(--orange); border-color: var(--orange); }
   footer a { color: var(--muted); }
 </style>
 </head>
@@ -169,6 +190,8 @@
       <a href="https://github.com/ghodeaniket/memscope">GitHub</a>
       &nbsp;·&nbsp;
       <a href="./story.html">the story</a>
+      &nbsp;·&nbsp;
+      <a href="./explore.html">one-shots</a>
     </nav>
   </header>
 
@@ -243,6 +266,18 @@ git clone https://github.com/ghodeaniket/memscope && cd memscope
 ./memscope.sh guard --dry-run
 ./memscope.sh install-guard</pre>
     <p class="note">If you run Claude Code next to Chrome and VS Code, you likely have these orphans right now. It’s a <a href="https://github.com/anthropics/claude-code/issues/22612">known</a> <a href="https://github.com/anthropics/claude-code/issues/40667">leak</a>.</p>
+
+    <section class="agent" id="send">
+      <h2><span class="n">05</span> Send to an agent</h2>
+      <p>A bug, a feature, a change. Write it like you’d tell Claude. This opens a GitHub issue labeled as a prompt — not a ticket. If we later wire an agent, this is the intake.</p>
+      <form id="agent-form">
+        <textarea name="prompt" required placeholder="The dry-run should also name the Claude session that spawned each orphan."></textarea>
+        <div class="agent-row">
+          <input name="who" type="text" placeholder="Your name, if you want credit">
+          <button type="submit">Send to an agent</button>
+        </div>
+      </form>
+    </section>
   </div>
 
   <div id="machine">
@@ -283,7 +318,7 @@ License: MIT
   </div>
 
   <footer>
-    MIT · <a href="https://github.com/ghodeaniket/memscope">source</a> · a <a href="https://ghodeaniket.github.io/humanroom/">humanroom</a> tool
+    MIT · <a href="https://github.com/ghodeaniket/memscope">source</a> · <a href="./soul.md">soul.md</a> · <a href="./explore.html">one-shots</a> · a <a href="https://ghodeaniket.github.io/humanroom/">humanroom</a> tool
   </footer>
 </main>
 <script>
@@ -298,6 +333,16 @@ License: MIT
     bh.classList.toggle("on", !isM);
     bm.classList.toggle("on", isM);
   }
+
+  document.getElementById("agent-form").onsubmit = function (e) {
+    e.preventDefault();
+    var prompt = this.prompt.value.trim();
+    var who = this.who.value.trim();
+    var title = "[prompt] " + prompt.split("\n")[0].slice(0, 72);
+    var body = prompt + (who ? "\n\n— " + who : "") + "\n\n---\nTreat this as a prompt, not a ticket. From https://ghodeaniket.github.io/memscope/";
+    var url = "https://github.com/ghodeaniket/memscope/issues/new?title=" + encodeURIComponent(title) + "&body=" + encodeURIComponent(body) + "&labels=prompt";
+    window.open(url, "_blank", "noopener");
+  };
   bh.onclick = () => show("human");
   bm.onclick = () => show("machine");
   document.getElementById("copy-md").onclick = async (e) => {
