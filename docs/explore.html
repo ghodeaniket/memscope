@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memscope · one-shots</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #fbfaf6; color: #17140f; font: 16px/1.45 ui-sans-serif, system-ui, sans-serif; padding: 1.5rem 1rem 4rem; }
+  main { max-width: 52rem; margin: 0 auto; }
+  h1 { font-size: 1.4rem; letter-spacing: -0.02em; margin: 0 0 0.4rem; }
+  .lede { color: #6e675c; margin-bottom: 1.4rem; max-width: 40em; }
+  .grid { display: grid; gap: 10px; }
+  @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+  article {
+    border: 1px solid #17140f; padding: 0.9rem 1rem 1rem; background: #fff;
+  }
+  article.pinned { outline: 3px solid #e8571f; }
+  .k { font: 700 0.68rem/1 ui-monospace, Menlo, monospace; letter-spacing: 0.12em; text-transform: uppercase; color: #e8571f; }
+  h2 { font-size: 1.15rem; margin: 0.35rem 0 0.35rem; }
+  p { color: #6e675c; font-size: 0.95rem; }
+  .row { display: flex; gap: 0.6rem; margin-top: 0.7rem; align-items: center; }
+  a { color: #17140f; }
+  button {
+    font: 700 0.68rem/1 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    background: #17140f; color: #fbfaf6; border: 0; padding: 0.5rem 0.7rem; cursor: pointer;
+  }
+  button.on { background: #e8571f; }
+  footer { margin-top: 1.6rem; font-size: 0.8rem; color: #6e675c; }
+</style>
+</head>
+<body>
+<main>
+  <h1>memscope · one-shots</h1>
+  <p class="lede">Six directions from the YC talk’s “one-shot N, then triage.” Pin the ones that feel right. Recombine later. This page is disposable — for us, not for users.</p>
+  <div class="grid" id="grid"></div>
+  <footer><a href="./">live paper page</a> · <a href="./soul.md">soul.md</a> · pins stay in this browser</footer>
+</main>
+<script>
+var items = [
+  { id: "paper", href: "./", name: "v-paper (live)", why: "Current door. Paper, orange, dither knobs, human/machine, send-to-an-agent. The Paxel-shaped one." },
+  { id: "zine", href: "./v-zine.html", name: "v-zine", why: "SOTA mood. Photocopied, stamped, slightly crooked. No orange, no shader." },
+  { id: "man", href: "./v-man.html", name: "v-man", why: "The product is a man page. SYNOPSIS is the install." },
+  { id: "ticket", href: "./v-ticket.html", name: "v-ticket", why: "Startup School shareable ticket. The census is the artifact." },
+  { id: "swiss", href: "./v-swiss.html", name: "v-swiss", why: "Poster, not a website. Three words. One red bar." },
+  { id: "census", href: "./v-census.html", name: "v-census", why: "The dry-run IS the page. Green phosphor. Almost no marketing." },
+  { id: "broadsheet", href: "./v-broadsheet.html", name: "v-broadsheet", why: "A newspaper. Masthead, pull quote, dateline. No startup button." }
+];
+var key = "memscope-pins";
+function pins() { try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { return []; } }
+function save(p) { localStorage.setItem(key, JSON.stringify(p)); }
+function render() {
+  var p = pins();
+  var ordered = items.slice().sort(function (a, b) {
+    return (p.indexOf(b.id) >= 0) - (p.indexOf(a.id) >= 0);
+  });
+  var g = document.getElementById("grid");
+  g.innerHTML = "";
+  ordered.forEach(function (it) {
+    var on = p.indexOf(it.id) >= 0;
+    var el = document.createElement("article");
+    if (on) el.className = "pinned";
+    el.innerHTML = '<div class="k">' + (on ? "pinned · " : "") + it.id + '</div><h2>' + it.name + '</h2><p>' + it.why + '</p><div class="row"><a href="' + it.href + '">open</a><button type="button" data-id="' + it.id + '" class="' + (on ? "on" : "") + '">' + (on ? "unpin" : "pin") + '</button></div>';
+    g.appendChild(el);
+  });
+  g.querySelectorAll("button").forEach(function (b) {
+    b.onclick = function () {
+      var id = b.getAttribute("data-id");
+      var cur = pins();
+      var i = cur.indexOf(id);
+      if (i >= 0) cur.splice(i, 1); else cur.push(id);
+      save(cur);
+      render();
+    };
+  });
+}
+render();
+</script>
+</body>
+</html>
