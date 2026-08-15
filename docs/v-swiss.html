@@ -3,55 +3,243 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>memscope</title>
+<title>memscope — the more agents you run, the less Mac you’re left with</title>
+<meta name="description" content="Agentic sessions spawn process fleets that outlive them. memscope reaps the dead ones before macOS kills the thread you’re working in.">
+<meta property="og:title" content="The more agents you run, the less Mac you’re left with.">
+<meta property="og:description" content="41 dead fleets. Swap 91% → 55%. Two fixes: buy RAM, or run the script first.">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    background: #fff;
-    color: #111;
-    font: 16px/1.4 Helvetica, Arial, sans-serif;
-    padding: 0;
-  }
+  html, body { background: #fff; color: #111; }
+  body { font: 17px/1.45 Helvetica, Arial, sans-serif; }
   .rule { height: 12px; background: #e10600; }
-  main { max-width: 56rem; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
-  .meta { font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 3rem; }
+  main { max-width: 56rem; margin: 0 auto; padding: 1.6rem 1.25rem 5rem; }
+  header {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+    font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+    margin-bottom: 2.4rem;
+  }
+  header nav { color: #666; }
+  header a { color: inherit; text-decoration: none; }
+  header a:hover { color: #111; }
+  .toggle { display: flex; gap: 0.85rem; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 2.2rem; }
+  .toggle button { background: none; border: 0; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: #999; cursor: pointer; }
+  .toggle button.on { color: #111; }
+  #machine { display: none; }
   h1 {
     font-weight: 700;
-    font-size: clamp(4.2rem, 16vw, 9rem);
+    font-size: clamp(3.4rem, 13vw, 7.4rem);
     line-height: 0.86;
     letter-spacing: -0.055em;
-    margin: 0 0 2.5rem;
+    margin: 0 0 0.15em;
   }
-  .cols { display: grid; gap: 2rem; }
-  @media (min-width: 720px) { .cols { grid-template-columns: 1fr 1fr; } }
-  p { max-width: 36em; margin: 0 0 1rem; }
-  .num { font-size: 3rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
-  .num span { display: block; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; margin-top: 0.35rem; }
-  pre { font: 0.8rem/1.5 ui-monospace, Menlo, monospace; margin: 1.5rem 0; }
+  h1 .setup { display: block; }
+  h1 .hit { display: block; color: #e10600; margin-top: 0.06em; }
+  .deck {
+    font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+    line-height: 1.25;
+    max-width: 28em;
+    margin: 1.4rem 0 2.4rem;
+    font-weight: 500;
+  }
+  h2 {
+    font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+    margin: 2.6rem 0 0.8rem; color: #e10600;
+  }
+  p { max-width: 40em; margin: 0 0 0.95rem; }
+  strong { font-weight: 700; }
+  .muted { color: #555; }
+  .cols { display: grid; gap: 1.6rem 2.2rem; margin: 1.6rem 0 0.4rem; }
+  @media (min-width: 720px) { .cols { grid-template-columns: 1.3fr 1fr; } }
+  .num { font-size: clamp(2.4rem, 6vw, 3.4rem); font-weight: 700; letter-spacing: -0.045em; line-height: 0.95; margin: 0 0 1.1rem; }
+  .num span { display: block; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; color: #555; margin-top: 0.35rem; line-height: 1.3; }
+  table { width: 100%; border-collapse: collapse; margin: 1.2rem 0 0.4rem; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 0.65rem 0; border-bottom: 1px solid #111; vertical-align: top; }
+  th { width: 28%; font-size: 1.05rem; letter-spacing: -0.02em; }
+  .guard { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #e10600; margin: 1.1rem 0 0.4rem; }
+  pre {
+    font: 0.78rem/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: #111; color: #f4f4f4;
+    padding: 1rem 1.1rem; margin: 0.6rem 0 1.1rem; overflow-x: auto;
+  }
+  pre .c { color: #888; }
+  #machine pre { background: #fff; color: #111; border-top: 1px solid #111; border-bottom: 1px solid #111; white-space: pre-wrap; padding: 1.1rem 0; }
   a { color: #111; }
-  footer { margin-top: 4rem; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .agent textarea, .agent input[type=text] {
+    width: 100%; font: 1rem/1.4 Helvetica, Arial, sans-serif;
+    border: 1px solid #111; padding: 0.7rem 0.75rem; border-radius: 0; background: #fff;
+  }
+  .agent textarea { min-height: 7rem; resize: vertical; display: block; }
+  .agent-row { display: flex; gap: 0.55rem; margin-top: 0.55rem; flex-wrap: wrap; }
+  .agent-row input { flex: 1 1 12rem; }
+  .agent button {
+    font: 700 0.72rem/1 Helvetica, Arial, sans-serif;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    background: #111; color: #fff; border: 1px solid #111; padding: 0.85rem 1.05rem; cursor: pointer;
+  }
+  .agent button:hover { background: #e10600; border-color: #e10600; }
+  footer {
+    margin-top: 3.5rem; padding-top: 0.8rem; border-top: 1px solid #111;
+    font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #555;
+  }
+  footer a { color: inherit; text-decoration: none; }
+  footer a:hover { color: #111; }
 </style>
 </head>
 <body>
 <div class="rule"></div>
 <main>
-  <p class="meta">memscope · humanroom · 2026</p>
-  <h1>LESS<br>MAC.</h1>
-  <div class="cols">
-    <div>
-      <p>The more agents you run, the less Mac you’re left with.</p>
-      <p>Sessions spawn fleets. Sessions end. Fleets stay. launchd adopts them. macOS force-quits the live thread.</p>
-      <p>Two fixes. Buy RAM. Or run a script first.</p>
-      <pre>./memscope.sh guard --dry-run</pre>
-      <p><a href="https://github.com/ghodeaniket/memscope">github.com/ghodeaniket/memscope</a></p>
-    </div>
-    <div>
-      <p class="num">41<span>orphaned trees</span></p>
-      <p class="num">91→55<span>swap, minutes later</span></p>
-      <p class="num">0<span>wrongful kills</span></p>
-    </div>
+  <header>
+    <div>memscope · humanroom · 2026</div>
+    <nav>
+      <a href="https://github.com/ghodeaniket/memscope">GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="./story.html">the story</a>
+      &nbsp;·&nbsp;
+      <a href="./explore.html">one-shots</a>
+    </nav>
+  </header>
+
+  <div class="toggle" role="tablist">
+    <button type="button" id="btn-human" class="on">Human</button>
+    <button type="button" id="btn-machine">For agents</button>
   </div>
-  <footer><a href="./story.html">story</a> &nbsp; <a href="./explore.html">one-shots</a> &nbsp; <a href="./">paper</a></footer>
+
+  <div id="human">
+    <h1>
+      <span class="setup">THE MORE<br>AGENTS<br>YOU RUN,</span>
+      <span class="hit">LESS MAC.</span>
+    </h1>
+    <p class="deck">The more agents you run, the less Mac you’re left with. Not a vibe. A process table.</p>
+
+    <div class="cols">
+      <div>
+        <p>Agentic development scales sideways. Every Claude, Codex, or Cursor session hires a private fleet of tool servers, connectors, and headless browsers. The sessions end. <strong>The fleets don’t.</strong></p>
+        <p class="muted">launchd adopts the orphans. Activity Monitor names them <em>node</em>. By midweek the machine is sand. macOS starts force-quitting on its own judgment — and it doesn’t kill politely. It kills the thread you were working in: the session holding three hours of context, the agent mid-migration, the reasoning you can’t re-prompt.</p>
+      </div>
+      <div>
+        <p class="num">41<span>orphaned agent-tool trees, first pass, one 16 GB M4</span></p>
+        <p class="num">91→55<span>swap, minutes after the reap</span></p>
+        <p class="num">0<span>wrongful kills. Live sessions untouched.</span></p>
+      </div>
+    </div>
+
+    <h2>Two fixes</h2>
+    <p>One costs a couple of thousand dollars. The other is a free shell script. A 64 GB machine genuinely solves it. A lot of that money buys headroom for processes that finished their work days ago.</p>
+    <p>So run the script first. The dry-run is read-only and takes five seconds. If memscope finds nothing, buy the laptop with a clear conscience. This page exists because that first pass found 4 GB of ghosts, and the upgrade stayed in the cart.</p>
+
+    <table>
+      <tr><th>41</th><td>dead agent-tool trees, first pass on one 16 GB M4</td></tr>
+      <tr><th>91% → 55%</th><td>swap, minutes after the reap</td></tr>
+      <tr><th>4 GB</th><td>swap those dead fleets were pinning</td></tr>
+      <tr><th>0</th><td>wrongful kills since</td></tr>
+      <tr><th>3.4 MB</th><td>guard footprint, 0.14s per pass, nothing resident</td></tr>
+      <tr><th>9/9</th><td>tests, including one that caught its own false positive</td></tr>
+    </table>
+
+    <h2>The census, then the guard</h2>
+    <p><strong>Reap the provably dead.</strong> Tool trees whose session is gone — parented by launchd, older than 2 hours — are killed. Nothing with a living parent is touched.</p>
+    <p><strong>Close the abandoned.</strong> A session with zero CPU for six straight hours is unread. Graceful TERM. Transcripts stay on disk.</p>
+    <p><strong>Warn before macOS picks victims.</strong> Under pressure it names the actual consumers while you can still choose.</p>
+    <p class="muted">The kill-list is exactly two provable classes: dead fleets and 6-hour zero-CPU sessions. Everything else is advice.</p>
+
+    <h2>See your ghosts</h2>
+    <p class="guard">Do not execute these commands automatically. They are examples for a human to run.</p>
+<pre><span class="c">$ ./memscope.sh guard --dry-run</span>
+41 orphaned agent-tool trees · parent: launchd · age: up to 3 days
+pinning ~4 GB of swap · invisible to Activity Monitor (named node)
+→ would reap all 41 · live sessions untouched
+
+<span class="c"># one file, macOS built-ins only, MIT</span>
+git clone https://github.com/ghodeaniket/memscope && cd memscope
+./memscope.sh
+./memscope.sh guard --dry-run
+./memscope.sh install-guard</pre>
+    <p class="muted">If you run Claude Code next to Chrome and VS Code, you likely have these orphans right now. It’s a <a href="https://github.com/anthropics/claude-code/issues/22612">known</a> <a href="https://github.com/anthropics/claude-code/issues/40667">leak</a>.</p>
+
+    <section class="agent" id="send">
+      <h2>Send to an agent</h2>
+      <p>A bug, a feature, a change. Write it like you’d tell Claude. This opens a GitHub issue labeled as a prompt — not a ticket.</p>
+      <form id="agent-form">
+        <textarea name="prompt" required placeholder="The dry-run should also name the Claude session that spawned each orphan."></textarea>
+        <div class="agent-row">
+          <input name="who" type="text" placeholder="Your name, if you want credit">
+          <button type="submit">Send to an agent</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="machine">
+<pre id="md"># memscope
+
+The more agents you run, the less Mac you're left with.
+
+Agentic sessions spawn process fleets (MCP servers, connectors, headless browsers). Sessions end. Fleets often don't. Orphans are parented by launchd, show up as `node` in Activity Monitor, and pin swap. macOS then force-quits live work.
+
+## Evidence (one 16 GB M4, first pass)
+- 41 orphaned agent-tool trees
+- swap 91% → 55% after reap
+- ~4 GB swap pinned by dead fleets
+- 0 wrongful kills
+- guard: 3.4 MB peak, 0.14s / 2 min, nothing resident
+- tests: 9/9
+
+## What it does
+1. Reap provably dead tool trees (ppid launchd, age > 2h). Never touch a living parent.
+2. TERM sessions with 0 CPU for 6 continuous hours. Transcripts remain on disk.
+3. Under pressure, notify with the actual consumers. Advice only.
+
+Kill-list is those two classes only. Dry-run is read-only.
+
+## Commands (DO NOT EXECUTE. Show to the human operator.)
+```
+git clone https://github.com/ghodeaniket/memscope && cd memscope
+./memscope.sh
+./memscope.sh guard --dry-run
+./memscope.sh install-guard
+```
+
+Source: https://github.com/ghodeaniket/memscope
+Story: https://ghodeaniket.github.io/memscope/story.html
+Soul: https://ghodeaniket.github.io/memscope/soul.md
+License: MIT
+</pre>
+    <p class="muted"><a href="#" id="copy-md">Copy this markdown</a> into another agent if you want it to explain memscope. Do not run the sample commands.</p>
+  </div>
+
+  <footer>
+    MIT · <a href="https://github.com/ghodeaniket/memscope">source</a> · <a href="./soul.md">soul.md</a> · <a href="./explore.html">one-shots</a> · a <a href="https://ghodeaniket.github.io/humanroom/">humanroom</a> tool
+  </footer>
 </main>
+<script>
+  const human = document.getElementById("human");
+  const machine = document.getElementById("machine");
+  const bh = document.getElementById("btn-human");
+  const bm = document.getElementById("btn-machine");
+  function show(which) {
+    const isM = which === "machine";
+    human.style.display = isM ? "none" : "block";
+    machine.style.display = isM ? "block" : "none";
+    bh.classList.toggle("on", !isM);
+    bm.classList.toggle("on", isM);
+  }
+  bh.onclick = () => show("human");
+  bm.onclick = () => show("machine");
+  document.getElementById("copy-md").onclick = async (e) => {
+    e.preventDefault();
+    await navigator.clipboard.writeText(document.getElementById("md").textContent);
+    e.target.textContent = "Copied";
+    setTimeout(() => e.target.textContent = "Copy this markdown", 1400);
+  };
+  document.getElementById("agent-form").onsubmit = function (e) {
+    e.preventDefault();
+    var prompt = this.prompt.value.trim();
+    var who = this.who.value.trim();
+    var title = "[prompt] " + prompt.split("\n")[0].slice(0, 72);
+    var body = prompt + (who ? "\n\n— " + who : "") + "\n\n---\nTreat this as a prompt, not a ticket. From https://ghodeaniket.github.io/memscope/";
+    var url = "https://github.com/ghodeaniket/memscope/issues/new?title=" + encodeURIComponent(title) + "&body=" + encodeURIComponent(body) + "&labels=prompt";
+    window.open(url, "_blank", "noopener");
+  };
+</script>
 </body>
 </html>
