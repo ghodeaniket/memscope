@@ -9,13 +9,14 @@
 <meta property="og:description" content="Dead agent fleets pin gigabytes of swap. memscope is the census, then the guard.">
 <style>
   :root {
-    --bg: #fafaf8;
-    --ink: #111;
-    --muted: #5c5c5c;
-    --line: #111;
-    --orange: #e85d04;
-    --code: #111;
-    --code-fg: #f3f1ea;
+    --bg: #fbfaf6;
+    --paper: #fbfaf6;
+    --ink: #17140f;
+    --muted: #6e675c;
+    --line: #17140f;
+    --orange: #e8571f;
+    --code: #171410;
+    --code-fg: #e7e2d8;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: var(--bg); color: var(--ink); }
@@ -127,6 +128,36 @@
     margin-top: 3rem; padding-top: 1.1rem; border-top: 1px solid var(--line);
     font: 0.8rem/1.5 ui-sans-serif, system-ui, sans-serif; color: var(--muted);
   }
+
+  .rig { border: 2px solid var(--ink); margin: 1.6rem 0 0.5rem; }
+  .rig canvas { display: block; width: 100%; height: 168px; image-rendering: pixelated; }
+  .knobs {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 0; border-top: 2px solid var(--ink);
+    font: 700 0.68rem/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  .knob { padding: 0.7rem 0.8rem; border-right: 1px solid var(--line); }
+  .knob:last-child { border-right: 0; }
+  .knob label { display: block; color: var(--orange); margin-bottom: 0.4rem; }
+  .knob input { width: 100%; accent-color: var(--orange); }
+  .rig-note { color: var(--muted); font-size: 0.92em; margin: 0.55rem 0 1.4rem; }
+  .cards { display: grid; gap: 10px; margin: 1.6rem 0 1.8rem; }
+  @media (min-width: 640px) { .cards { grid-template-columns: repeat(3, 1fr); } }
+  .cards article {
+    border: 1px solid var(--line);
+    background: #f3f1ea;
+    padding: 1rem 1.05rem 1.1rem;
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  }
+  .cards article:hover {
+    transform: translateY(-3px);
+    border-color: var(--orange);
+    box-shadow: 4px 4px 0 var(--orange);
+  }
+  .cards .n { font: 700 0.68rem/1 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.12em; color: var(--orange); }
+  .cards h3 { font: 700 1.05rem/1.25 ui-sans-serif, system-ui, sans-serif; margin: 0.45rem 0 0.45rem; letter-spacing: -0.02em; }
+  .cards p { margin: 0; color: var(--muted); font-size: 0.95rem; }
   footer a { color: var(--muted); }
 </style>
 </head>
@@ -151,16 +182,35 @@
     <p class="lede">Agentic development scales sideways. Every session spawns its own fleet of tool servers, connectors, and headless browsers. The sessions end. <strong>The fleets don’t.</strong></p>
     <p class="muted">By midweek the machine is sand. macOS starts force-quitting on its own judgment — and it doesn’t kill politely. It kills the thread you were working in: the session holding three hours of context, the agent mid-migration, the reasoning you can’t re-prompt.</p>
 
+    <div class="rig">
+      <canvas id="dither" width="320" height="150" aria-label="Dithered shader. Tune with the knobs."></canvas>
+      <div class="knobs">
+        <div class="knob"><label for="k-grain">grain</label><input id="k-grain" type="range" min="2" max="9" step="1" value="4"></div>
+        <div class="knob"><label for="k-speed">speed</label><input id="k-speed" type="range" min="0" max="100" value="35"></div>
+        <div class="knob"><label for="k-heat">heat</label><input id="k-heat" type="range" min="0" max="100" value="55"></div>
+      </div>
+    </div>
+    <p class="rig-note">A live dither, not a PNG. Tune it until it feels like the machine under load.</p>
+
     <p class="quote">There are two fixes. One costs a couple of thousand dollars. The other is a free shell script.<span>run the dry-run before you buy RAM</span></p>
 
-    <h2><span class="n">00</span> The pattern</h2>
-    <p>You scale the workflow: more agents, more subagents, more tools. Whatever the framework, each session is a process fleet. Fleet size × open sessions is the real footprint.</p>
-
-    <h2><span class="n">01</span> The decay</h2>
-    <p>Sessions end. Children get orphaned and idle forever. RAM fills with finished work, swap grows to hold it, and every click pays a paging tax. It reads as “my Mac is old.” It isn’t.</p>
-
-    <h2><span class="n">02</span> The cost</h2>
-    <p>At the ceiling, macOS picks victims. The beachball is annoying. Losing state is expensive — the long-running agent, the context you built all morning. That’s the bill nobody itemizes.</p>
+    <div class="cards">
+      <article>
+        <div class="n">00 · pattern</div>
+        <h3>You scale the workflow</h3>
+        <p>More agents, more tools. Each session is a process fleet. Fleet size × open sessions is the real footprint.</p>
+      </article>
+      <article>
+        <div class="n">01 · decay</div>
+        <h3>The machine turns to sand</h3>
+        <p>Sessions end. Children idle forever. RAM fills with finished work. It reads as “my Mac is old.” It isn’t.</p>
+      </article>
+      <article>
+        <div class="n">02 · cost</div>
+        <h3>Force-quit hell</h3>
+        <p>macOS picks victims. The beachball is annoying. Losing the thread you were in is expensive.</p>
+      </article>
+    </div>
 
     <p class="call">A 64 GB machine genuinely solves it</p>
     <p>A lot of that money buys headroom for processes that finished their work days ago. So run the script first. The dry-run is read-only and takes five seconds. If memscope finds nothing, buy the laptop with a clear conscience. This page exists because that first pass found 4 GB of ghosts, and the upgrade stayed in the cart.</p>
@@ -256,6 +306,80 @@ License: MIT
     e.target.textContent = "Copied";
     setTimeout(() => e.target.textContent = "Copy this markdown", 1400);
   };
+</script>
+
+<script>
+(function () {
+  var cv = document.getElementById("dither");
+  if (!cv) return;
+  var ctx = cv.getContext("2d");
+  var grainEl = document.getElementById("k-grain");
+  var speedEl = document.getElementById("k-speed");
+  var heatEl = document.getElementById("k-heat");
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var B = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5].map(function (v) { return (v + 0.5) / 16; });
+  var buf = document.createElement("canvas");
+  var bctx = buf.getContext("2d");
+  var t0 = 0, last = 0;
+  function hexToRgb(h) {
+    h = h.trim();
+    if (h[0] === "#") h = h.slice(1);
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+  }
+  function colors() {
+    var s = getComputedStyle(document.documentElement);
+    return {
+      paper: hexToRgb(s.getPropertyValue("--paper") || s.getPropertyValue("--bg")),
+      ink: hexToRgb(s.getPropertyValue("--ink")),
+      orange: hexToRgb(s.getPropertyValue("--orange"))
+    };
+  }
+  function frame(now) {
+    var grain = parseInt(grainEl.value, 10);
+    var speed = parseInt(speedEl.value, 10) / 100;
+    var heat = parseInt(heatEl.value, 10) / 100;
+    var rect = cv.getBoundingClientRect();
+    if (rect.width === 0) { requestAnimationFrame(frame); return; }
+    var w = Math.max(40, Math.floor(rect.width / grain));
+    var h = Math.max(20, Math.floor(rect.height / grain));
+    if (buf.width !== w) buf.width = w;
+    if (buf.height !== h) buf.height = h;
+    if (cv.width !== w) cv.width = w;
+    if (cv.height !== h) cv.height = h;
+    var dt = last ? (now - last) : 16;
+    last = now;
+    t0 += dt * 0.00045 * (0.15 + speed * 1.6);
+    var c = colors();
+    var img = bctx.createImageData(w, h);
+    var d = img.data;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var u = x / w, v = y / h;
+        var f = Math.sin(u * 6.5 + t0 * 1.3)
+              + Math.sin((v * 5.2 - t0) * 1.1)
+              + Math.sin((u + v) * 4.0 + t0 * 0.7)
+              + Math.sin(Math.hypot(u - 0.5 + 0.2 * Math.sin(t0), v - 0.5) * 11.0 - t0 * 1.8);
+        var val = f / 8 + 0.5;
+        var thr = B[(y % 4) * 4 + (x % 4)];
+        var on = val > thr;
+        var i = (y * w + x) * 4;
+        var col = on ? ((val > (1 - heat * 0.75)) ? c.orange : c.ink) : c.paper;
+        d[i] = col[0]; d[i+1] = col[1]; d[i+2] = col[2]; d[i+3] = 255;
+      }
+    }
+    bctx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(buf, 0, 0);
+    if (!reduced) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  [grainEl, speedEl, heatEl].forEach(function (el) {
+    el.addEventListener("input", function () {
+      if (reduced) { last = 0; requestAnimationFrame(frame); }
+    });
+  });
+})();
 </script>
 </body>
 </html>
