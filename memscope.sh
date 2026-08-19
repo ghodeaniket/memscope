@@ -8,6 +8,10 @@
 #   memscope.sh guard [--dry-run]                 one guard pass: reap orphaned
 #                                                 MCP trees; under pressure,
 #                                                 notify with specific advice
+#   memscope.sh receipt [--reap]                  the story: N apps using X GB,
+#                                                 which trees are already dead,
+#                                                 and what a reap gives back
+#   memscope.sh status | summary [DATE]           guard performance / daily rollup
 #   memscope.sh install-guard                     launchd agent, every 2 min
 #   memscope.sh uninstall-guard
 #
@@ -19,7 +23,7 @@ set -u
 
 MODE="report"
 case "${1:-}" in
-  guard|install-guard|uninstall-guard|report|status|menubar|summary) MODE="$1"; shift ;;
+  guard|install-guard|uninstall-guard|report|status|menubar|summary|receipt) MODE="$1"; shift ;;
 esac
 
 LOG_DIR="${MEMSCOPE_LOG_DIR:-$HOME/.memscope}"   # override for tests
@@ -27,6 +31,16 @@ GUARD_LOG="$LOG_DIR/guard.log"
 PLIST="$HOME/Library/LaunchAgents/com.memscope.guard.plist"
 LABEL="com.memscope.guard"
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+
+# Colors + rule, defined before mode dispatch so every subcommand can use them.
+case " $* " in *" --no-color "*) _C=0 ;; *) [ -t 1 ] && _C=1 || _C=0 ;; esac
+if [ "$_C" = 1 ]; then
+  B=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; YEL=$'\033[33m'
+  GRN=$'\033[32m'; CYN=$'\033[36m'; R=$'\033[0m'
+else
+  B=""; DIM=""; RED=""; YEL=""; GRN=""; CYN=""; R=""
+fi
+hr() { printf '%s\n' "${DIM}────────────────────────────────────────────────────────────${R}"; }
 
 # Process-table source: real ps, or a canned fixture for unit tests
 ps_snapshot() {
@@ -257,6 +271,88 @@ run_summary() {
   echo "actions logged: ${ACTIONS:-0}   (details: $GUARD_LOG)"
 }
 
+# Named per-app census: "MB|procs|App Name", biggest first.
+app_census() {
+  ps_snapshot | awk '
+  {
+    rss=$4; name=""
+    if ($0 ~ /claude-code\//)                          name="Claude Code sessions"
+    else if (match($0, /\/Applications\/[^\/]*\.app\//))
+      name = substr($0, RSTART+14, RLENGTH-19)
+    else if ($5 ~ /(^|\/)(node|bun|deno|tsx)$/)        name="agent tooling (node/MCP)"
+    else if ($5 ~ /(^|\/)java$/)                       name="Java"
+    else if ($5 ~ /(postgres|mysqld|mongod)$/)         name="local databases"
+    else next
+    mb[name]+=rss/1024; cnt[name]++
+  }
+  END { for (a in mb) printf "%.0f|%d|%s\n", mb[a], cnt[a], a }' | sort -rn -t'|'
+}
+
+# The story: what is running, what is dead weight, what a reap gives back.
+run_receipt() {
+  case " $* " in *" --reap "*) REAP=1 ;; *) REAP=0 ;; esac
+  SWAP_BEFORE_MB=$(sysctl -n vm.swapusage | awk '{gsub(/M/,"",$6); print int($6)}')
+  RSS_BEFORE_MB=$(ps_snapshot | awk '{s+=$4} END{printf "%.0f", s/1024}')
+
+  CENSUS=$(app_census)
+  NAPPS=$(printf '%s\n' "$CENSUS" | grep -c . )
+  NPROC=$(printf '%s\n' "$CENSUS" | awk -F'|' '{s+=$2} END{print s+0}')
+
+  printf '%s\n' "${B}${CYN}WHAT IS RUNNING${R}"
+  hr
+  printf "%d apps · %d processes · %.1f GB resident · %.1f GB in swap\n\n" \
+    "$NAPPS" "$NPROC" "$(echo "$RSS_BEFORE_MB" | awk '{print $1/1024}')" \
+    "$(echo "$SWAP_BEFORE_MB" | awk '{print $1/1024}')"
+  printf '%s\n' "$CENSUS" | head -10 | awk -F'|' \
+    '{printf "  %-28s %7.2f GB  %3d proc\n", $3, $1/1024, $2}'
+
+  ORPHANS=$(find_orphans)
+  NTREES=0; DEADMB=0
+  if [ -n "$ORPHANS" ]; then
+    NTREES=$(printf '%s\n' "$ORPHANS" | grep -c .)
+    DEADMB=$(printf '%s\n' "$ORPHANS" | awk -F'|' '{s+=$1} END{printf "%.0f", s}')
+  fi
+
+  printf '\n%s\n' "${B}${CYN}WHAT IS ALREADY DEAD${R}"
+  hr
+  if [ "$NTREES" = 0 ]; then
+    printf "%s\n" "${GRN}No zombie process trees. Every process above has a living parent.${R}"
+    TOTAL_REAPS=$(grep -c "] reaped:" "$GUARD_LOG" 2>/dev/null || echo 0)
+    [ "${TOTAL_REAPS:-0}" -gt 0 ] && \
+      printf "%s\n" "${DIM}(guard has reaped ${TOTAL_REAPS} trees to date — this machine is being kept clean)${R}"
+    return 0
+  fi
+
+  printf '%s\n' "$ORPHANS" | sort -rn -t'|' | head -8 | awk -F'|' \
+    '{printf "  %-28s %7.0f MB   dead for %s\n", $4, $1, $3}'
+  printf "  %s\n" "${YEL}${NTREES} zombie trees · ~${DEADMB} MB of RAM held by work that finished${R}"
+
+  if [ "$REAP" = 0 ]; then
+    printf '\n%s\n' "${DIM}Run: memscope.sh receipt --reap   to kill them and print the after-picture.${R}"
+    return 0
+  fi
+
+  printf '\n%s\n' "${B}${CYN}REAPING${R}"
+  hr
+  printf '%s\n' "$ORPHANS" | while IFS='|' read -r mb pids age name; do
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] reaped: $name ($mb MB, up $age) pids:$pids" >> "$GUARD_LOG"
+  done
+
+  SWAP_AFTER_MB=$(sysctl -n vm.swapusage | awk '{gsub(/M/,"",$6); print int($6)}')
+  RSS_AFTER_MB=$(ps_snapshot | awk '{s+=$4} END{printf "%.0f", s/1024}')
+  printf "killed %d zombie trees\n\n" "$NTREES"
+  printf '%s\n' "${B}${GRN}REGAINED${R}"
+  hr
+  awk -v rb="$RSS_BEFORE_MB" -v ra="$RSS_AFTER_MB" -v sb="$SWAP_BEFORE_MB" -v sa="$SWAP_AFTER_MB" 'BEGIN{
+    printf "  resident  %6.2f GB → %6.2f GB   (%+.0f MB)\n", rb/1024, ra/1024, ra-rb
+    printf "  swap      %6.2f GB → %6.2f GB   (%+.0f MB)\n", sb/1024, sa/1024, sa-sb
+    printf "  total reclaimed: %.0f MB\n", (rb-ra)+(sb-sa)
+  }'
+  printf "%s\n" "${DIM}macOS keeps draining swap for a few minutes — re-run to see the settled number.${R}"
+}
+
 run_menubar() {
   # SwiftBar/xbar plugin format. Install SwiftBar, then symlink:
   #   ln -s <this script's menubar wrapper> ~/SwiftBar/memscope.2m.sh
@@ -282,6 +378,7 @@ case "$MODE" in
   guard) run_guard "${1:-}"; exit 0 ;;
   status) run_status; exit 0 ;;
   summary) run_summary "${1:-}"; exit 0 ;;
+  receipt) run_receipt "$@"; exit 0 ;;
   menubar) run_menubar; exit 0 ;;
   install-guard)
     mkdir -p "$LOG_DIR" "$HOME/Library/LaunchAgents"
@@ -317,18 +414,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --top) TOP="${2:-8}"; shift 2 ;;
     --no-color) COLOR=0; shift ;;
-    *) echo "usage: memscope.sh [report|guard|install-guard|uninstall-guard] [--top N] [--no-color]" >&2; exit 1 ;;
+    *) echo "usage: memscope.sh [report|receipt|guard|status|summary|menubar|install-guard|uninstall-guard] [--top N] [--no-color]" >&2; exit 1 ;;
   esac
 done
 [ -t 1 ] || COLOR=0
 
-if [ "$COLOR" = 1 ]; then
-  B=$'\033[1m'; DIM=$'\033[2m'; RED=$'\033[31m'; YEL=$'\033[33m'; GRN=$'\033[32m'; CYN=$'\033[36m'; R=$'\033[0m'
-else
-  B=""; DIM=""; RED=""; YEL=""; GRN=""; CYN=""; R=""
-fi
-
-hr() { printf '%s\n' "${DIM}────────────────────────────────────────────────────────────${R}"; }
 section() { printf '\n%s\n' "${B}${CYN}$1${R}"; hr; }
 
 # Snapshot process table once; reuse everywhere.
