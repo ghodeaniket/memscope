@@ -83,7 +83,7 @@ No curated demo — this is the whole log, including the parts that complicate t
   <div><b>4</b><span>abandoned sessions closed</span></div>
   <div><b>0</b><span>wrongful kills</span></div>
   <div><b>0</b><span>kernel out-of-memory kills*</span></div>
-  <div><b>3.4 MB</b><span>guard cost, 0.14s per pass</span></div>
+  <div><b>0.24 s</b><span>guard cost per pass, 4.3 MB peak</span></div>
 </div>
 
 <h2>Day by day</h2>
@@ -114,8 +114,8 @@ half a tree per day.</b></p>
       app, nothing with a living parent was ever touched.</li>
       <li>Steady state is real: after the backlog cleared, orphan accumulation stays near zero
       without any manual intervention.</li>
-      <li>The guard is nearly free: 3.4&thinsp;MB peak, 0.14&thinsp;s per pass, nothing resident
-      between passes.</li>
+      <li>The guard is nearly free: 4.3&thinsp;MB peak, 0.24&thinsp;s per silent pass (~1.8&thinsp;s on the
+      at-most-twice-hourly passes that notify), nothing resident in between.</li>
     </ul>
   </section>
   <section class="no"><h3>Not proven</h3>
@@ -126,6 +126,9 @@ half a tree per day.</b></p>
       <li><b>"No more force-quits" is only partly instrumented.</b> macOS keeps its kill log
       for about 20 hours here — far too short to compare against the week before.</li>
       <li>Swap pressure did <b>not</b> fall over the eight days. See below.</li>
+      <li><b>The reclaimed-MB figures are understated.</b> Until 20 Aug memscope
+      sized processes with <code>ps</code> RSS, which counts only pages still in
+      RAM. See the correction below.</li>
     </ul>
   </section>
 </div>
@@ -140,6 +143,27 @@ Live load grew all week — more sessions, more tools, more tabs — and swallow
 <p>That distinction turns out to be the useful part. With the dead weight provably gone —
 eight days of near-zero orphan accumulation — whatever pressure remains is <em>real demand</em>.
 That is a much better number to take to a hardware decision than one inflated by ghosts.</p>
+
+<h2>A correction we had to make</h2>
+<p>On day eight a screenshot showed a <code>node</code> process at 6.5&thinsp;GB that
+memscope's own census reported as a rounding error. The cause: memscope sized
+processes with <code>ps</code> RSS, which counts only pages still resident in
+physical RAM. On a machine that has swapped 27&thinsp;GB out — precisely the machine
+this tool is for — RSS is close to meaningless:</p>
+<pre>pid 49225   Activity Monitor: <span class="g">5,393 MB</span>    ps RSS: 10 MB    <span class="c">← 500x apart</span></pre>
+<p>memscope now reports <b>physical footprint</b> (resident + compressed + swapped),
+the same figure Activity Monitor shows. Two consequences for the numbers on this
+page, stated plainly: the <b>~575&thinsp;MB "reclaimed" on day one is understated</b>
+— it counted only the resident pages of those 41 dead trees, not what they held in
+compression and swap. The ~4&thinsp;GB of swap released minutes later is the better
+indicator of their real size, and it cannot be recovered exactly, because the
+processes are gone. The kill decisions themselves were never affected: orphans are
+identified by parentage and age, never by size.</p>
+<p class="deck" style="font-size:.9rem">The same screenshot found the machine's two
+largest processes: forgotten <code>react-scripts</code> dev servers, 5.4&thinsp;GB and
+3.2&thinsp;GB, running 21 and 8 hours on branches nobody was looking at. Both had
+living parents, so memscope will never touch them. That is the honest boundary of
+what a reaper can do — and an argument for reading the census yourself.</p>
 
 <h2>What the kernel says</h2>
 <p>macOS logs every memory kill. In the window it still retains, running Chrome, Cursor,
@@ -157,21 +181,22 @@ before-and-after.</p>
 <pre>$ memscope receipt
 
 WHAT IS RUNNING
-28 apps · 229 processes · 5.2 GB resident · 27.4 GB in swap
+28 apps · 213 processes · 50.5 GB footprint · 18.7 GB swapped
+<span class="c">footprint = resident + compressed + swapped (what Activity Monitor shows).
+Processes share memory, so per-app figures sum above physical RAM.</span>
 
-  Google Chrome                   0.65 GB   48 proc
-  Grok Bot                        0.40 GB    7 proc
-  agent tooling (node/MCP)        0.33 GB   <span class="g">93 proc</span>
-  Claude Code sessions            0.25 GB    6 proc
-  Claude                          0.23 GB   14 proc
-  Cursor                          0.20 GB   14 proc
-  Visual Studio Code              0.15 GB   20 proc
+  Google Chrome                  12.18 GB   46 proc
+  Visual Studio Code              4.68 GB   20 proc
+  agent tooling (node/MCP)        4.56 GB   <span class="g">82 proc</span>
+  Claude                          2.45 GB   13 proc
+  Cursor                          2.30 GB   14 proc
+  Claude Code sessions            0.50 GB    4 proc
 
 WHAT IS ALREADY DEAD
 <span class="g">No zombie process trees. Every process above has a living parent.</span>
 <span class="c">(guard has reaped 45 trees to date — this machine is being kept clean)</span></pre>
-<p><b>93 tool processes for 6 sessions.</b> That is the fan-out this whole thing is about —
-and none of it is dead any more.</p>
+<p><b>82 tool processes for 4 sessions, 4.6&thinsp;GB.</b> That is the fan-out this whole
+thing is about — and none of it is dead any more.</p>
 
 <h2>Run it on yours</h2>
 <pre>git clone https://github.com/ghodeaniket/memscope &amp;&amp; cd memscope
