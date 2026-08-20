@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>memscope field log — eight days, 3,710 passes</title>
+<meta name="description" content="Every guard pass memscope has run, what it killed, and what the data does and does not prove.">
+<meta property="og:title" content="memscope field log — eight days on one 16 GB Mac">
+<meta property="og:description" content="3,710 passes. 45 dead fleets reaped. 0 wrongful kills. And the numbers that complicate the story.">
+<style>
+  :root{--bg:#faf9f6;--fg:#15181c;--dim:#666e78;--rule:#dcd8d0;--card:#f2efe9;
+        --hot:#c0392b;--ok:#2e7d51;--code:#12151a;--codefg:#dbe3ec;--num:#15181c}
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0e1013;--fg:#e6e8ea;--dim:#98a0aa;--rule:#252a31;--card:#161a1f;
+          --hot:#ff6b52;--ok:#5fd39a;--code:#0a0c0f;--codefg:#cbd5e1;--num:#e6e8ea}}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);
+       font:16px/1.6 -apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+       padding:0 1.2rem 5rem}
+  .w{max-width:52rem;margin:0 auto}
+  header{padding:2rem 0 1rem;font:600 .7rem/1 ui-monospace,Menlo,monospace;
+         letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+         display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+  header a{color:var(--dim);text-decoration:none}
+  h1{font-size:clamp(1.9rem,5vw,3rem);line-height:1.08;letter-spacing:-.025em;
+     margin:2.2rem 0 .8rem;font-weight:700}
+  .deck{font-size:1.1rem;color:var(--dim);max-width:34em;margin-bottom:2.5rem}
+  h2{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--hot);
+     margin:3rem 0 1rem;font-family:ui-monospace,Menlo,monospace}
+  p{margin:0 0 1rem;max-width:38em}
+  .big{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));
+       gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:8px;
+       overflow:hidden;margin:0 0 1rem}
+  .big div{background:var(--card);padding:1rem 1.1rem}
+  .big b{display:block;font:700 1.7rem/1.1 ui-monospace,Menlo,monospace;color:var(--num);
+         letter-spacing:-.03em}
+  .big span{font-size:.72rem;color:var(--dim);display:block;margin-top:.35rem;line-height:1.35}
+  .scroll{overflow-x:auto;margin:1rem 0}
+  table{width:100%;border-collapse:collapse;font-size:.88rem;min-width:34rem}
+  th,td{text-align:left;padding:.6rem .7rem;border-bottom:1px solid var(--rule);white-space:nowrap}
+  th{font:600 .68rem/1 ui-monospace,Menlo,monospace;letter-spacing:.1em;
+     text-transform:uppercase;color:var(--dim)}
+  td.n{font-family:ui-monospace,Menlo,monospace;text-align:right}
+  .bar{display:inline-block;height:9px;background:var(--hot);opacity:.75;border-radius:2px;
+       vertical-align:middle}
+  .hit{color:var(--hot);font-weight:600}
+  .clean{color:var(--dim)}
+  pre{background:var(--code);color:var(--codefg);border-radius:8px;padding:1rem 1.15rem;
+      font:.78rem/1.6 ui-monospace,Menlo,monospace;overflow-x:auto;margin:1rem 0}
+  pre .g{color:#7ee787}.c{color:#8b949e}
+  .two{display:grid;gap:1.6rem;margin:1rem 0}
+  @media(min-width:700px){.two{grid-template-columns:1fr 1fr}}
+  .two section{border-top:2px solid var(--rule);padding-top:.9rem}
+  .two h3{font-size:.95rem;margin-bottom:.6rem}
+  .two ul{margin:0;padding-left:1.1rem;color:var(--dim);font-size:.92rem}
+  .two li{margin-bottom:.5rem}
+  .two .yes{border-top-color:var(--ok)}
+  .two .no{border-top-color:var(--hot)}
+  blockquote{border-left:3px solid var(--hot);padding:.7rem 0 .7rem 1rem;margin:1.4rem 0;
+             color:var(--dim);background:var(--card);border-radius:0 6px 6px 0}
+  blockquote b{color:var(--fg)}
+  footer{margin-top:4rem;padding-top:1rem;border-top:1px solid var(--rule);
+         font:.72rem/1.6 ui-monospace,Menlo,monospace;letter-spacing:.08em;
+         text-transform:uppercase;color:var(--dim)}
+  footer a{color:var(--dim)}
+  a{color:var(--hot)}
+</style>
+</head>
+<body><div class="w">
+<header>
+  <span>memscope · field log</span>
+  <span><a href="./">home</a> · <a href="./story.html">the story</a> ·
+  <a href="https://github.com/ghodeaniket/memscope">github</a></span>
+</header>
+
+<h1>Eight days.<br>3,710 guard passes.<br>Here is everything it did.</h1>
+<p class="deck">One 16&thinsp;GB M4 MacBook Pro running agentic development all day.
+No curated demo — this is the whole log, including the parts that complicate the story.</p>
+
+<div class="big">
+  <div><b>3,710</b><span>guard passes since 13 Aug</span></div>
+  <div><b>45</b><span>dead tool-fleets reaped</span></div>
+  <div><b>4</b><span>abandoned sessions closed</span></div>
+  <div><b>0</b><span>wrongful kills</span></div>
+  <div><b>0</b><span>kernel out-of-memory kills*</span></div>
+  <div><b>3.4 MB</b><span>guard cost, 0.14s per pass</span></div>
+</div>
+
+<h2>Day by day</h2>
+<div class="scroll"><table>
+<tr><th>Day</th><th>Passes</th><th>Reaped</th><th>Closed</th><th>Swap range</th><th></th></tr>
+<tr><td>13 Aug</td><td class="n">31</td><td class="n hit">41</td><td class="n">—</td><td class="n">79–85%</td><td><i class="bar" style="width:120px"></i></td></tr>
+<tr><td>14 Aug</td><td class="n">398</td><td class="n hit">1</td><td class="n hit">2</td><td class="n">64–96%</td><td><i class="bar" style="width:6px"></i></td></tr>
+<tr><td>15 Aug</td><td class="n">276</td><td class="n clean">0</td><td class="n">—</td><td class="n">71–93%</td><td></td></tr>
+<tr><td>16 Aug</td><td class="n">401</td><td class="n clean">0</td><td class="n">—</td><td class="n">72–90%</td><td></td></tr>
+<tr><td>17 Aug</td><td class="n">719</td><td class="n hit">2</td><td class="n hit">1</td><td class="n">73–98%</td><td><i class="bar" style="width:9px"></i></td></tr>
+<tr><td>18 Aug</td><td class="n">578</td><td class="n clean">0</td><td class="n">—</td><td class="n">83–98%</td><td></td></tr>
+<tr><td>19 Aug</td><td class="n">719</td><td class="n hit">1</td><td class="n">—</td><td class="n">83–100%</td><td><i class="bar" style="width:6px"></i></td></tr>
+<tr><td>20 Aug</td><td class="n">588</td><td class="n clean">0</td><td class="n">—</td><td class="n">91–99%</td><td></td></tr>
+</table></div>
+
+<p>Day one cleared a backlog that had been accumulating for days: <b>41 dead fleets, ~600&thinsp;MB
+resident — and about 4&thinsp;GB of pinned swap</b> released within minutes. After that the shape
+changes completely. Leaks still happen (1, 2, 1 on later days) and get caught the same day,
+usually within the two-hour window. <b>Accumulation went from a multi-day pile-up to roughly
+half a tree per day.</b></p>
+
+<h2>What the data proves — and what it doesn't</h2>
+<div class="two">
+  <section class="yes"><h3>Supported by the log</h3>
+    <ul>
+      <li>The detector works: 45 dead fleets found and killed across 3,710 passes.</li>
+      <li>The safety contract holds at scale: <b>zero wrongful kills</b>. No live session, no
+      app, nothing with a living parent was ever touched.</li>
+      <li>Steady state is real: after the backlog cleared, orphan accumulation stays near zero
+      without any manual intervention.</li>
+      <li>The guard is nearly free: 3.4&thinsp;MB peak, 0.14&thinsp;s per pass, nothing resident
+      between passes.</li>
+    </ul>
+  </section>
+  <section class="no"><h3>Not proven</h3>
+    <ul>
+      <li><b>No control group.</b> The same person also started paying attention to session
+      sprawl that week. Nothing separates the tool's effect from the habit's.</li>
+      <li><b>n = 1.</b> One machine, one user, one workload.</li>
+      <li><b>"No more force-quits" is only partly instrumented.</b> macOS keeps its kill log
+      for about 20 hours here — far too short to compare against the week before.</li>
+      <li>Swap pressure did <b>not</b> fall over the eight days. See below.</li>
+    </ul>
+  </section>
+</div>
+
+<h2>The uncomfortable number</h2>
+<p>If the claim were "memscope lowers memory pressure," this log would refute it. Swap started
+the week around 85% of an 11&thinsp;GB swapfile. Today it sits at <b>96% of a 29.7&thinsp;GB
+one</b> — roughly 28&thinsp;GB paged out, against 16&thinsp;GB of physical RAM.</p>
+<blockquote>The honest claim is narrower, and it is the one worth making:
+<b>memscope removes work that already finished. It does not shrink the work you are still doing.</b>
+Live load grew all week — more sessions, more tools, more tabs — and swallowed the winnings.</blockquote>
+<p>That distinction turns out to be the useful part. With the dead weight provably gone —
+eight days of near-zero orphan accumulation — whatever pressure remains is <em>real demand</em>.
+That is a much better number to take to a hardware decision than one inflated by ghosts.</p>
+
+<h2>What the kernel says</h2>
+<p>macOS logs every memory kill. In the window it still retains, running Chrome, Cursor,
+VS&nbsp;Code, two AI assistants, a bot and Excel at once:</p>
+<pre><span class="c"># jetsam kills, by reason</span>
+JETSAM_REASON_MEMORY_LONGIDLE          3,684   <span class="c">← routine idle daemon reaping</span>
+JETSAM_REASON_MEMORY_PERPROCESSLIMIT       9   <span class="c">← Apple daemons hitting own caps</span>
+JETSAM_REASON_MEMORY_VMPAGESHORTAGE        <span class="g">0</span>   <span class="c">← system out of memory</span>
+JETSAM_REASON_MEMORY_HIGHWATER             <span class="g">0</span>   <span class="c">← system out of memory</span></pre>
+<p class="deck" style="font-size:.9rem;margin:0">*Zero system-pressure kills — but only across
+the ~20&thinsp;hours macOS still retains. It corroborates the experience; it is not a
+before-and-after.</p>
+
+<h2>Today's machine, unedited</h2>
+<pre>$ memscope receipt
+
+WHAT IS RUNNING
+28 apps · 229 processes · 5.2 GB resident · 27.4 GB in swap
+
+  Google Chrome                   0.65 GB   48 proc
+  Grok Bot                        0.40 GB    7 proc
+  agent tooling (node/MCP)        0.33 GB   <span class="g">93 proc</span>
+  Claude Code sessions            0.25 GB    6 proc
+  Claude                          0.23 GB   14 proc
+  Cursor                          0.20 GB   14 proc
+  Visual Studio Code              0.15 GB   20 proc
+
+WHAT IS ALREADY DEAD
+<span class="g">No zombie process trees. Every process above has a living parent.</span>
+<span class="c">(guard has reaped 45 trees to date — this machine is being kept clean)</span></pre>
+<p><b>93 tool processes for 6 sessions.</b> That is the fan-out this whole thing is about —
+and none of it is dead any more.</p>
+
+<h2>Run it on yours</h2>
+<pre>git clone https://github.com/ghodeaniket/memscope &amp;&amp; cd memscope
+./memscope.sh receipt          <span class="g"># what you are running, and what of it is dead</span>
+./memscope.sh guard --dry-run  <span class="g"># the kill list, before you grant anything</span></pre>
+<p>Read-only until you install the guard. If it finds nothing, you have learned something too — your pressure is live work, and the upgrade is the honest answer.</p>
+
+<footer>memscope · MIT · <a href="https://github.com/ghodeaniket/memscope">source</a> ·
+data pulled from <code>~/.memscope/</code> on 20 Aug 2026 · a
+<a href="https://ghodeaniket.github.io/humanroom/">humanroom</a> tool</footer>
+</div></body>
+</html>
