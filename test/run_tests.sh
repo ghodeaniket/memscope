@@ -26,7 +26,7 @@ EOF
 # Extract just ps_snapshot() and find_orphans() from the script and run them
 # against the fixture — pure unit test of the detection logic.
 OUT=$(MEMSCOPE_PS_FIXTURE="$FIXTURE" bash -c '
-  eval "$(sed -n "/^ps_snapshot()/,/^}/p; /^find_orphans()/,/^}/p" "'"$MEMSCOPE"'")"
+  eval "$(sed -n "/^ps_snapshot()/,/^}/p; /^footprint_map()/,/^}/p; /^mem_snapshot()/,/^}/p; /^find_orphans()/,/^}/p" "'"$MEMSCOPE"'")"
   find_orphans
 ')
 check "orphan >2h detected (root 101 + child 102)"      'echo "$OUT" | grep -q "|101 102|"'

@@ -48,9 +48,39 @@ ps_snapshot() {
   else ps -Axo pid=,ppid=,etime=,rss=,args=; fi
 }
 
+# Physical footprint per pid (what Activity Monitor calls "Memory"): resident +
+# compressed + swapped. ps RSS counts only resident pages, so on a machine that
+# is swapping — exactly memscope's target — RSS under-reports by orders of
+# magnitude (observed 5,393 MB actual vs 10 MB RSS). Emits "pid KB".
+footprint_map() {
+  top -l 1 -n 9999 -stats pid,mem 2>/dev/null | awk '
+  $1 ~ /^[0-9]+$/ && $2 != "" {
+    v=$2; sub(/[+-]$/,"",v)
+    unit=substr(v,length(v),1); num=substr(v,1,length(v)-1)+0
+    if      (unit=="G") kb=num*1048576
+    else if (unit=="M") kb=num*1024
+    else if (unit=="K") kb=num
+    else if (unit=="B") kb=num/1024
+    else                kb=v+0
+    printf "%s %d\n", $1, kb
+  }'
+}
+
+# Process table with field 4 = physical footprint (KB) instead of RSS.
+# Falls back to ps RSS for any pid top did not report, and entirely when a
+# test fixture is supplying the table.
+mem_snapshot() {
+  if [ -n "${MEMSCOPE_PS_FIXTURE:-}" ] || [ -n "${MEMSCOPE_NO_FOOTPRINT:-}" ]; then
+    ps_snapshot; return
+  fi
+  awk 'NR==FNR { fp[$1]=$2; next }
+       { if ($1 in fp) $4 = fp[$1]; print }' \
+      <(footprint_map) <(ps_snapshot)
+}
+
 # Emit orphaned MCP trees as: totalMB|pids to kill|age|name
 find_orphans() {
-  ps_snapshot | awk '
+  mem_snapshot | awk '
   { pid[NR]=$1; ppid[NR]=$2; et[NR]=$3; rss[NR]=$4; line[NR]=$0 }
   END {
     # orphan age: >24h ("-" in etime) OR HH:MM:SS with HH>=2 — so connectors
@@ -71,6 +101,11 @@ find_orphans() {
     }
   }'
 }
+
+# Cheap ps-only orphan probe for the guard hot path: same predicate, RSS
+# numbers. If it finds anything, the caller re-runs find_orphans for accurate
+# footprint figures. Keeps the common "nothing to do" pass fast.
+find_orphans_fast() { MEMSCOPE_NO_FOOTPRINT=1 find_orphans; }
 
 swap_pct() {
   sysctl -n vm.swapusage | awk '{t=$3; u=$6; gsub(/M/,"",t); gsub(/M/,"",u); if (t>0) printf "%.0f", u*100/t; else print 0}'
@@ -140,6 +175,16 @@ reap_idle_sessions() {
   printf '%b' "$NEWSTATE" > "$STATE"
 }
 
+# Biggest consumers by footprint — only computed when a notification will
+# actually be sent (footprint costs ~1s; the silent path stays cheap).
+topline_footprint() {
+  mem_snapshot | awk '
+    /Google Chrome/                 {c+=$4}
+    /\/Applications\/Claude\.app\// {cl+=$4}
+    $5 ~ /(^|\/)node$/              {n+=$4}
+    END {printf "Chrome %.1fG, Claude %.1fG, node %.1fG", c/1048576, cl/1048576, n/1048576}'
+}
+
 run_guard() {
   DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
   mkdir -p "$LOG_DIR"
@@ -151,7 +196,9 @@ run_guard() {
   reap_idle_sessions "$DRY" "$TS"
 
   # 1. Always reap garbage: orphaned MCP trees are dead sessions' leaks.
-  ORPHANS=$(find_orphans)
+  # Probe cheaply; only pay for footprint measurement if there is something.
+  ORPHANS=$(find_orphans_fast)
+  [ -n "$ORPHANS" ] && ORPHANS=$(find_orphans)
   FREED_MB=0; TREES=0
   if [ -n "$ORPHANS" ]; then
     while IFS='|' read -r mb pids age name; do
@@ -176,13 +223,12 @@ run_guard() {
     [ $(( $(date +%s) - LAST_ALERT )) -lt 1800 ] && ALERT_OK=0
   fi
   if [ "$LEVEL" -ge 2 ] || [ "$SPCT" -ge 85 ]; then
-    TOPLINE=$(ps -Axo rss=,args= | awk '
-      /Google Chrome Helper \(Renderer\)/ {c+=$1}
-      /\/Applications\/Claude\.app\//     {cl+=$1}
-      END {printf "Chrome tabs %.1fG, Claude app %.1fG", c/1048576, cl/1048576}')
     MSG="Swap ${SPCT}%."
     [ "$TREES" -gt 0 ] && MSG="$MSG Freed ${FREED_MB}MB (${TREES} dead MCP trees)."
-    MSG="$MSG Biggest: ${TOPLINE}. Close what you can."
+    if [ "$ALERT_OK" = 1 ]; then
+      TOPLINE=$(topline_footprint)
+      MSG="$MSG Biggest: ${TOPLINE}. Close what you can."
+    fi
     if [ "$DRY" = 0 ] && [ "$ALERT_OK" = 1 ]; then
       notify "memscope guard — memory pressure" "$MSG"
       date +%s > "$ALERT_STAMP"
@@ -273,7 +319,7 @@ run_summary() {
 
 # Named per-app census: "MB|procs|App Name", biggest first.
 app_census() {
-  ps_snapshot | awk '
+  mem_snapshot | awk '
   {
     rss=$4; name=""
     if ($0 ~ /claude-code\//)                          name="Claude Code sessions"
@@ -292,7 +338,7 @@ app_census() {
 run_receipt() {
   case " $* " in *" --reap "*) REAP=1 ;; *) REAP=0 ;; esac
   SWAP_BEFORE_MB=$(sysctl -n vm.swapusage | awk '{gsub(/M/,"",$6); print int($6)}')
-  RSS_BEFORE_MB=$(ps_snapshot | awk '{s+=$4} END{printf "%.0f", s/1024}')
+  RSS_BEFORE_MB=$(mem_snapshot | awk '{s+=$4} END{printf "%.0f", s/1024}')
 
   CENSUS=$(app_census)
   NAPPS=$(printf '%s\n' "$CENSUS" | grep -c . )
@@ -300,9 +346,11 @@ run_receipt() {
 
   printf '%s\n' "${B}${CYN}WHAT IS RUNNING${R}"
   hr
-  printf "%d apps · %d processes · %.1f GB resident · %.1f GB in swap\n\n" \
+  printf "%d apps · %d processes · %.1f GB footprint · %.1f GB swapped\n" \
     "$NAPPS" "$NPROC" "$(echo "$RSS_BEFORE_MB" | awk '{print $1/1024}')" \
     "$(echo "$SWAP_BEFORE_MB" | awk '{print $1/1024}')"
+  printf "%s\n" "${DIM}footprint = resident + compressed + swapped (what Activity Monitor shows).${R}"
+  printf "%s\n\n" "${DIM}Processes share memory, so per-app figures sum above physical RAM.${R}"
   printf '%s\n' "$CENSUS" | head -10 | awk -F'|' \
     '{printf "  %-28s %7.2f GB  %3d proc\n", $3, $1/1024, $2}'
 
@@ -341,7 +389,7 @@ run_receipt() {
   done
 
   SWAP_AFTER_MB=$(sysctl -n vm.swapusage | awk '{gsub(/M/,"",$6); print int($6)}')
-  RSS_AFTER_MB=$(ps_snapshot | awk '{s+=$4} END{printf "%.0f", s/1024}')
+  RSS_AFTER_MB=$(mem_snapshot | awk '{s+=$4} END{printf "%.0f", s/1024}')
   printf "killed %d zombie trees\n\n" "$NTREES"
   printf '%s\n' "${B}${GRN}REGAINED${R}"
   hr
@@ -423,7 +471,7 @@ section() { printf '\n%s\n' "${B}${CYN}$1${R}"; hr; }
 
 # Snapshot process table once; reuse everywhere.
 # Fields: pid ppid etime rss(all in KB) args...
-PS_SNAPSHOT="$(ps -Axo pid=,ppid=,etime=,rss=,args=)"
+PS_SNAPSHOT="$(mem_snapshot)"
 
 # ---------------------------------------------------------------- 1. pressure
 section "SYSTEM PRESSURE"
