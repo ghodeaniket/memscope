@@ -1,16 +1,18 @@
 # memscope
 
 Memory census + pressure guard for the agent-era Mac. Zero dependencies —
-`ps`, `sysctl`, `memory_pressure`, `awk` — one file, MIT licensed.
+`ps`, `top`, `sysctl`, `memory_pressure`, `awk` — one file, MIT licensed.
 
-**Cost of the guard itself: 3.4 MB peak for ~0.14 s every 2 minutes, nothing
-resident in between, 32 KB on disk.** A memory tool that ran a fat helper
+**Cost of the guard itself: 4.3 MB peak for ~0.24 s every 2 minutes (~1.8 s on
+the at-most-twice-an-hour passes that send a notification), nothing resident
+in between, 32 KB on disk.** A memory tool that ran a fat helper
 daemon all day would be part of the problem.
 
 Field results from its first 48 hours on a 16 GB M4 MacBook Pro running
 heavy Claude Code + MCP workloads: 41 orphaned MCP connector trees reaped
 (dead sessions had been pinning ~4 GB of swap for days — swap fell 91% → 55%
-within minutes), two day-old idle sessions auto-closed at dawn, one fresh
+within minutes; the ~600 MB figure logged at the time was RSS-based and so
+understates their true footprint — see *Measuring memory*), two day-old idle sessions auto-closed at dawn, one fresh
 leak caught at exactly its 2-hour threshold, zero wrongful kills — and the
 first workday with no out-of-memory force-quit dialogs, hangs, or beachballs
 under an otherwise identical load.
@@ -49,6 +51,9 @@ Electron app ships one). memscope understands that workload.
 ./memscope.sh install-guard      # launchd agent: guard every 2 min
 ./memscope.sh uninstall-guard
 ./memscope.sh status             # guard performance: passes, reaps, swap sparkline
+./memscope.sh receipt            # N apps, X GB, what is already dead
+./memscope.sh receipt --reap     # ...and what killing it gives back
+./memscope.sh summary [DATE]     # daily rollup
 ./memscope.sh menubar            # SwiftBar/xbar plugin output
 ```
 
@@ -102,6 +107,19 @@ The guard runs every 2 minutes and works ahead of the macOS
    CPU activity for 6+ hours. Everything else is advice.
    Logs: `~/.memscope/guard.log`, metrics: `~/.memscope/metrics.jsonl`.
 
+## Measuring memory
+
+memscope reports **physical footprint** — resident + compressed + swapped, the
+number Activity Monitor shows — not `ps` RSS. On a machine that is swapping,
+RSS counts only the pages still in RAM and under-reports wildly: one React dev
+server measured **5,393 MB actual against 10 MB RSS**, a 500x gap. Any tool
+that sizes processes with RSS will tell you your swapped-out memory hogs are
+tiny.
+
+Per-process footprints include shared memory, so per-app figures sum above
+physical RAM. memscope labels the total as footprint and says so rather than
+pretending it is a RAM total.
+
 ## Proving it works
 
 ```bash
@@ -138,4 +156,6 @@ Orphaned MCP trees (session is gone; connectors leaked):
 ```
 
 41 dead agent sessions had leaked their MongoDB connectors for up to 3 days.
-No existing tool looks for this.
+No existing tool looks for this. (That 611 MB was measured in RSS, before the
+footprint fix; the swap release of ~4 GB is the better indicator of what they
+were actually holding.)
