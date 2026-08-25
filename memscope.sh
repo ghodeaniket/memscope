@@ -156,35 +156,90 @@ pressure_tier() {
   fi
 }
 
-# Biggest quittable GUI app by footprint: "Name|GB". Never system processes.
+# Reclaim candidates, classified by what you would lose.
+#
+#   safe        — no user state at all: long-running dev servers (webpack/vite/
+#                 next/nodemon) that only need restarting. Nothing unsaved.
+#   recoverable — restores its own state on relaunch (browsers reopen tabs).
+#   risky       — may hold unsaved work (Excel, Word, editors). NEVER offered.
+#
+# Only "safe" is ever actionable from the alert. Everything else is named as
+# advice, so the decision stays with the human who knows what is unsaved.
+safe_candidates() {   # "MB|pid|label"
+  mem_snapshot | awk '
+    # dev servers only: a "start"/"serve"/"dev" watcher, not a running build
+    /react-scripts\/scripts\/start\.js|webpack(-dev)?-server|vite|next dev|nodemon/ &&
+    !/react-scripts build|memscope/ {
+      mins = 0
+      n = split($3, t, ":")
+      if ($3 ~ /-/)      mins = 1440              # days: definitely long-running
+      else if (n == 3)   mins = t[1]*60 + t[2]
+      else if (n == 2)   mins = t[1]
+      if (mins < 30) next                          # spare anything just started
+      name = "dev server"
+      if (match($0, /worktrees\/[^\/]+\/[^\/]+/)) {
+        seg = substr($0, RSTART+10, RLENGTH-10)
+        sub(/^[^\/]*\//, "", seg); name = "dev server (" seg ")"
+      }
+      printf "%.0f|%s|%s, idle %dh\n", $4/1024, $1, name, mins/60
+    }'
+}
+
+# Largest GUI app, named as advice only — never given a button.
 biggest_app() {
   mem_snapshot | awk '
     match($0, /\/Applications\/[^\/]*\.app\//) {
-      n = substr($0, RSTART+14, RLENGTH-19)
-      mb[n] += $4/1024
+      n = substr($0, RSTART+14, RLENGTH-19); mb[n] += $4/1024
     }
     END { best=""; b=0; for (a in mb) if (mb[a] > b) { b=mb[a]; best=a }
           if (best != "") printf "%s|%.1f", best, b/1024 }'
 }
 
-# Critical alert: a real dialog naming the hog, with a graceful-quit button.
-# Runs detached so a guard pass never blocks waiting for a human.
-critical_dialog() { # $1 headline
-  local app name gb
-  app=$(biggest_app); name=${app%%|*}; gb=${app##*|}
-  [ -z "$name" ] && return 0
-  ( osascript <<OSA >/dev/null 2>&1 &
+# Critical alert. Offers ONE action, and only when it is provably safe:
+# stopping long-idle dev servers. Default button is always "Not now", so a
+# reflexive Return never destroys anything. Runs detached — a guard pass is
+# never blocked waiting for a human.
+critical_dialog() { # $1 reason
+  local cands total n app appname appgb msg pids
+  cands=$(safe_candidates)
+  app=$(biggest_app); appname=${app%%|*}; appgb=${app##*|}
+
+  if [ -n "$cands" ]; then
+    total=$(printf '%s\n' "$cands" | awk -F'|' '{s+=$1} END{printf "%.1f", s/1024}')
+    n=$(printf '%s\n' "$cands" | grep -c .)
+    pids=$(printf '%s\n' "$cands" | awk -F'|' '{printf "%s ", $2}')
+    msg="$1
+
+Safe to stop now — nothing unsaved:
+$(printf '%s\n' "$cands" | awk -F'|' '{printf "  • %s  (%.1f GB)\n", $3, $1/1024}')
+Frees about ${total} GB. They restart with one command.
+
+Largest app is ${appname} (${appgb} GB) — your call, not mine."
+    ( osascript >/dev/null 2>&1 <<OSA &
 tell application "System Events"
   set r to button returned of (display alert "memscope — memory critical" ¬
-    message "$1
-
-Largest app: $name ($gb GB).
-Quitting it now avoids a freeze. macOS gives it a chance to save." ¬
-    as critical buttons {"Ignore", "Quit $name"} default button 2 giving up after 120)
-  if r is "Quit $name" then tell application "$name" to quit
+    message "$msg" as critical ¬
+    buttons {"Stop ${n} dev server(s)", "Not now"} default button "Not now" ¬
+    giving up after 300)
+  if r starts with "Stop" then do shell script "kill ${pids}"
 end tell
 OSA
-  ) &
+    ) &
+  else
+    # Nothing safe to offer: inform only, no action button at all.
+    msg="$1
+
+Nothing can be freed safely — no idle dev servers to stop.
+Largest app is ${appname} (${appgb} GB). Closing it would help, but only you
+know what is unsaved in it."
+    ( osascript >/dev/null 2>&1 <<OSA &
+tell application "System Events"
+  display alert "memscope — memory critical" message "$msg" as critical ¬
+    buttons {"OK"} default button "OK" giving up after 300
+end tell
+OSA
+    ) &
+  fi
 }
 
 notify() { # $1 title, $2 body
