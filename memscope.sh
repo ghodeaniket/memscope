@@ -107,6 +107,28 @@ find_orphans() {
 # footprint figures. Keeps the common "nothing to do" pass fast.
 find_orphans_fast() { MEMSCOPE_NO_FOOTPRINT=1 find_orphans; }
 
+# Absolute swap + disk facts. Percentage of a growing swapfile is a poor
+# signal: it sat >=90% for five days straight while the machine was fine, then
+# the machine wedged. What actually matters is HEADROOM (how much swap can
+# still be allocated) and RATE (how fast it is being consumed). Swap can only
+# grow into free disk, so disk space is the real ceiling.
+swap_used_mb() { sysctl -n vm.swapusage | awk '{gsub(/M/,"",$6); print int($6)}'; }
+swap_free_mb() { sysctl -n vm.swapusage | awk '{gsub(/M/,"",$9); print int($9)}'; }
+disk_free_gb() { df -g / 2>/dev/null | awk 'NR==2{print $4}'; }
+
+# Swap growth (MB) over roughly the last 10 minutes, from our own metrics.
+swap_growth_mb() {
+  local m="$LOG_DIR/metrics.jsonl" now
+  [ -s "$m" ] || { echo 0; return; }
+  now=$(swap_used_mb)
+  tail -6 "$m" | head -1 | awk -v now="$now" '
+    match($0, /"swap_used_mb":[0-9]+/) {
+      then = substr($0, RSTART+16, RLENGTH-16)+0
+      print int(now - then); found=1
+    }
+    END { if (!found) print 0 }'
+}
+
 swap_pct() {
   sysctl -n vm.swapusage | awk '{t=$3; u=$6; gsub(/M/,"",t); gsub(/M/,"",u); if (t>0) printf "%.0f", u*100/t; else print 0}'
 }
@@ -116,6 +138,53 @@ pressure_level() {
   sysctl -n kern.memorystatus_vm_pressure_level 2>/dev/null || {
     [ "$(swap_pct)" -ge 90 ] && echo 4 || echo 1
   }
+}
+
+# none | warn | critical — based on headroom and rate, not on a percentage
+# that has been pinned for days.
+pressure_tier() {
+  local free growth disk
+  free=$(swap_free_mb); growth=$(swap_growth_mb); disk=$(disk_free_gb)
+  if [ "${free:-9999}" -lt 1024 ] || [ "${disk:-999}" -lt 8 ] \
+     || { [ "${growth:-0}" -gt 3000 ] && [ "${free:-9999}" -lt 3072 ]; }; then
+    echo critical
+  elif [ "${free:-9999}" -lt 3072 ] || [ "${growth:-0}" -gt 2000 ] \
+     || [ "${disk:-999}" -lt 20 ]; then
+    echo warn
+  else
+    echo none
+  fi
+}
+
+# Biggest quittable GUI app by footprint: "Name|GB". Never system processes.
+biggest_app() {
+  mem_snapshot | awk '
+    match($0, /\/Applications\/[^\/]*\.app\//) {
+      n = substr($0, RSTART+14, RLENGTH-19)
+      mb[n] += $4/1024
+    }
+    END { best=""; b=0; for (a in mb) if (mb[a] > b) { b=mb[a]; best=a }
+          if (best != "") printf "%s|%.1f", best, b/1024 }'
+}
+
+# Critical alert: a real dialog naming the hog, with a graceful-quit button.
+# Runs detached so a guard pass never blocks waiting for a human.
+critical_dialog() { # $1 headline
+  local app name gb
+  app=$(biggest_app); name=${app%%|*}; gb=${app##*|}
+  [ -z "$name" ] && return 0
+  ( osascript <<OSA >/dev/null 2>&1 &
+tell application "System Events"
+  set r to button returned of (display alert "memscope — memory critical" ¬
+    message "$1
+
+Largest app: $name ($gb GB).
+Quitting it now avoids a freeze. macOS gives it a chance to save." ¬
+    as critical buttons {"Ignore", "Quit $name"} default button 2 giving up after 120)
+  if r is "Quit $name" then tell application "$name" to quit
+end tell
+OSA
+  ) &
 }
 
 notify() { # $1 title, $2 body
@@ -214,26 +283,35 @@ run_guard() {
     done <<< "$ORPHANS"
   fi
 
-  # 2. Under pressure: warn early, with specifics — before macOS force-quits.
-  # Cooldown: at most one pressure notification per 30 min (log every time).
-  ALERT_OK=1
-  ALERT_STAMP="$LOG_DIR/.last_alert"
-  if [ -f "$ALERT_STAMP" ]; then
-    LAST_ALERT=$(cat "$ALERT_STAMP" 2>/dev/null || echo 0)
-    [ $(( $(date +%s) - LAST_ALERT )) -lt 1800 ] && ALERT_OK=0
-  fi
-  if [ "$LEVEL" -ge 2 ] || [ "$SPCT" -ge 85 ]; then
-    MSG="Swap ${SPCT}%."
-    [ "$TREES" -gt 0 ] && MSG="$MSG Freed ${FREED_MB}MB (${TREES} dead MCP trees)."
-    if [ "$ALERT_OK" = 1 ]; then
-      TOPLINE=$(topline_footprint)
-      MSG="$MSG Biggest: ${TOPLINE}. Close what you can."
+  # 2. Tiered alerting. The old rule (swap% >= 85 or kernel level >= 2) was
+  # continuously true for five days — 263 alerts on the day the machine froze.
+  # An alarm that never stops carries no information. Alert on deterioration
+  # (headroom collapsing, swap growing fast), not on the steady state.
+  TIER=$(pressure_tier)
+  SWAP_FREE=$(swap_free_mb); GROWTH=$(swap_growth_mb); DISK_FREE=$(disk_free_gb)
+
+  if [ "$TIER" != "none" ]; then
+    # Cooldowns: warnings are quiet (60 min), critical is insistent (10 min).
+    if [ "$TIER" = critical ]; then COOL=600; STAMP="$LOG_DIR/.last_critical"
+    else                            COOL=3600; STAMP="$LOG_DIR/.last_alert"; fi
+    ALERT_OK=1
+    if [ -f "$STAMP" ]; then
+      LAST=$(cat "$STAMP" 2>/dev/null || echo 0)
+      [ $(( $(date +%s) - LAST )) -lt "$COOL" ] && ALERT_OK=0
     fi
+
+    REASON="swap headroom ${SWAP_FREE}MB, disk ${DISK_FREE}GB free"
+    [ "${GROWTH:-0}" -gt 500 ] && REASON="$REASON, +${GROWTH}MB swap in 10 min"
+
     if [ "$DRY" = 0 ] && [ "$ALERT_OK" = 1 ]; then
-      notify "memscope guard — memory pressure" "$MSG"
-      date +%s > "$ALERT_STAMP"
+      if [ "$TIER" = critical ]; then
+        critical_dialog "$REASON"
+      else
+        notify "memscope — memory pressure rising" "$REASON. Biggest: $(topline_footprint)."
+      fi
+      date +%s > "$STAMP"
     fi
-    echo "[$TS] pressure level=$LEVEL swap=${SPCT}% :: $MSG" >> "$GUARD_LOG"
+    echo "[$TS] $TIER :: $REASON" >> "$GUARD_LOG"
   elif [ "$TREES" -gt 0 ] && [ "$DRY" = 0 ]; then
     notify "memscope guard" "Reaped ${TREES} dead MCP trees, freed ~${FREED_MB} MB"
   fi
