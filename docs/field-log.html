@@ -82,7 +82,7 @@ No curated demo — this is the whole log, including the parts that complicate t
   <div><b>45</b><span>dead tool-fleets reaped</span></div>
   <div><b>4</b><span>abandoned sessions closed</span></div>
   <div><b>0</b><span>wrongful kills</span></div>
-  <div><b>0</b><span>kernel out-of-memory kills*</span></div>
+  <div><b>1</b><span>system freeze under memory exhaustion (24 Aug)</span></div>
   <div><b>0.24 s</b><span>guard cost per pass, 4.3 MB peak</span></div>
 </div>
 
@@ -125,6 +125,9 @@ half a tree per day.</b></p>
       <li><b>n = 1.</b> One machine, one user, one workload.</li>
       <li><b>"No more force-quits" is only partly instrumented.</b> macOS keeps its kill log
       for about 20 hours here — far too short to compare against the week before.</li>
+      <li><b>The machine still went down.</b> On 24 August it froze hard at 98%
+      swap and had to be restarted. Reaping garbage does not save a machine that
+      is structurally overloaded. See below.</li>
       <li>Swap pressure did <b>not</b> fall over the eight days. See below.</li>
       <li><b>The reclaimed-MB figures are understated.</b> Until 20 Aug memscope
       sized processes with <code>ps</code> RSS, which counts only pages still in
@@ -143,6 +146,25 @@ Live load grew all week — more sessions, more tools, more tabs — and swallow
 <p>That distinction turns out to be the useful part. With the dead weight provably gone —
 eight days of near-zero orphan accumulation — whatever pressure remains is <em>real demand</em>.
 That is a much better number to take to a hardware decision than one inflated by ghosts.</p>
+
+<h2>The night it went down anyway</h2>
+<p>On 24 August, five days into the guard running, the machine froze completely —
+cursor included — and had to be restarted. macOS had already rolled its own logs
+by the time we looked, so memscope's metrics are the only record of it:</p>
+<pre>18:13  swap 96%   resident 6.6 GB
+18:15  swap <span class="g">98%</span>   resident 6.7 GB   <span class="c">← peak; the machine wedges shortly after</span>
+18:17  swap 96%   resident 7.2 GB
+       <span class="c">──── six minutes, no passes: system down ────</span>
+18:23  swap 50%   resident 8.2 GB   <span class="c">← swap files recreated: it rebooted</span>
+18:35  swap 91%   resident 11.7 GB  <span class="c">← back under pressure within 12 minutes</span></pre>
+<p><b>memscope found zero orphans that day.</b> There was no garbage left to
+collect; every byte of that pressure was live work. That is the honest verdict on
+what a reaper can and cannot do: it removes finished work, and when finished work
+is already at zero, it has nothing left to give. <b>A tool that collects garbage
+cannot rescue a machine whose live workload exceeds its RAM.</b></p>
+<p>It is also the clearest evidence on this page for the opposite conclusion —
+that this particular machine is genuinely too small for this particular workload,
+and no amount of hygiene changes that.</p>
 
 <h2>A correction we had to make</h2>
 <p>On day eight a screenshot showed a <code>node</code> process at 6.5&thinsp;GB that
@@ -173,9 +195,10 @@ JETSAM_REASON_MEMORY_LONGIDLE          3,684   <span class="c">← routine idle 
 JETSAM_REASON_MEMORY_PERPROCESSLIMIT       9   <span class="c">← Apple daemons hitting own caps</span>
 JETSAM_REASON_MEMORY_VMPAGESHORTAGE        <span class="g">0</span>   <span class="c">← system out of memory</span>
 JETSAM_REASON_MEMORY_HIGHWATER             <span class="g">0</span>   <span class="c">← system out of memory</span></pre>
-<p class="deck" style="font-size:.9rem;margin:0">*Zero system-pressure kills — but only across
-the ~20&thinsp;hours macOS still retains. It corroborates the experience; it is not a
-before-and-after.</p>
+<p class="deck" style="font-size:.9rem;margin:0">Zero system-pressure kills in the ~20&thinsp;hours
+macOS still retains — but note that the 24 August freeze happened outside that window,
+and a total system wedge leaves no jetsam record at all. Absence of kills is not
+absence of trouble.</p>
 
 <h2>Today's machine, unedited</h2>
 <pre>$ memscope receipt
