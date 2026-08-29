@@ -374,8 +374,9 @@ run_guard() {
   # Metrics: one JSONL line per real pass — the performance record
   if [ "$DRY" = 0 ]; then
     RES_GB=$(ps -Axo rss= | awk '{s+=$1} END{printf "%.1f", s/1048576}')
-    printf '{"ts":"%s","level":%s,"swap_pct":%s,"resident_gb":%s,"trees":%s,"freed_mb":%s}\n' \
-      "$TS" "$LEVEL" "$SPCT" "$RES_GB" "$TREES" "$FREED_MB" >> "$LOG_DIR/metrics.jsonl"
+    printf '{"ts":"%s","level":%s,"swap_pct":%s,"swap_used_mb":%s,"swap_free_mb":%s,"disk_free_gb":%s,"growth_mb":%s,"tier":"%s","resident_gb":%s,"trees":%s,"freed_mb":%s}\n' \
+      "$TS" "$LEVEL" "$SPCT" "$(swap_used_mb)" "${SWAP_FREE:-0}" "${DISK_FREE:-0}" \
+      "${GROWTH:-0}" "${TIER:-none}" "$RES_GB" "$TREES" "$FREED_MB" >> "$LOG_DIR/metrics.jsonl"
   fi
 
   [ "$DRY" = 1 ] && echo "[$TS] dry-run: level=$LEVEL swap=${SPCT}% trees=$TREES freeable=${FREED_MB}MB"
